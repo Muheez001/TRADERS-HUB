@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Newspaper, BarChart3, MessageCircle, Rocket, Menu, X, LineChart, Sun, Moon } from 'lucide-react';
+import { Newspaper, BarChart3, MessageCircle, Rocket, Menu, X, LineChart, Sun, Moon, BrainCircuit } from 'lucide-react';
 import { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
@@ -7,6 +7,7 @@ const tabs = [
     { id: 'news', label: 'News Feed', icon: Newspaper },
     { id: 'prices', label: 'Live Prices', icon: BarChart3 },
     { id: 'charts', label: 'Charts', icon: LineChart },
+    { id: 'insights', label: 'AI Insights', icon: BrainCircuit },
     { id: 'chat', label: 'Community', icon: MessageCircle },
 ];
 

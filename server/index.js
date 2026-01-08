@@ -10,8 +10,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 
-import { fetchNews, fetchCryptoPrices, fetchForexPrices, fetchCommodityPrices } from './services/dataFetcher.js';
-import { analyzeNewsImpact } from './services/aiAnalyst.js';
+import { fetchNews, fetchCryptoPrices, fetchForexPrices, fetchCommodityPrices, fetchCandles, fetchForexCandles } from './services/dataFetcher.js';
+import { analyzeNewsImpact, analyzeMarketStructure } from './services/aiAnalyst.js';
 
 dotenv.config();
 
@@ -51,12 +51,59 @@ app.get('/api/prices', (req, res) => {
     res.json({ success: true, data: cachedPrices });
 });
 
+
 app.get('/api/prices/:type', (req, res) => {
     const { type } = req.params;
     if (cachedPrices[type]) {
         res.json({ success: true, data: cachedPrices[type] });
     } else {
         res.status(404).json({ success: false, message: 'Price type not found' });
+    }
+});
+
+/**
+ * Enhanced Insights API - Supports both Crypto and Forex
+ * GET /api/insights/:symbol/:timeframe?type=crypto|forex
+ */
+app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
+    try {
+        const { symbol, timeframe } = req.params;
+        const assetType = req.query.type || 'crypto';
+
+        console.log(`🔍 Analyzing ${symbol} (${assetType}) on ${timeframe}...`);
+
+        let candles;
+        let cleanSymbol = symbol;
+
+        if (assetType === 'forex') {
+            // For forex, expect format like EUR-USD or EURUSD
+            cleanSymbol = symbol.replace('-', '/').toUpperCase();
+            if (!cleanSymbol.includes('/') && cleanSymbol.length === 6) {
+                // Convert EURUSD to EUR/USD
+                cleanSymbol = cleanSymbol.slice(0, 3) + '/' + cleanSymbol.slice(3);
+            }
+            candles = await fetchForexCandles(cleanSymbol, timeframe);
+        } else {
+            cleanSymbol = symbol.toUpperCase();
+            candles = await fetchCandles(cleanSymbol, timeframe);
+        }
+
+        // Perform AI Analysis with asset type context
+        const analysis = await analyzeMarketStructure(cleanSymbol, timeframe, candles, assetType);
+
+        res.json({
+            success: true,
+            data: {
+                symbol: cleanSymbol,
+                assetType,
+                timeframe,
+                candles,
+                analysis
+            }
+        });
+    } catch (error) {
+        console.error('Insights Error:', error.message);
+        res.status(500).json({ success: false, message: 'Failed to generate insights' });
     }
 });
 

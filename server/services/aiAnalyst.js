@@ -144,4 +144,135 @@ function generateRuleBasedAnalysis(title, description) {
     };
 }
 
+/**
+ * Analyze market structure and generate trade setup (ENHANCED)
+ * @param {string} symbol - Asset symbol
+ * @param {string} timeframe - Chart timeframe
+ * @param {Array} candles - Array of OHLCV data
+ * @param {string} assetType - 'crypto' or 'forex'
+ */
+export async function analyzeMarketStructure(symbol, timeframe, candles, assetType = 'crypto') {
+    // Calculate key metrics from candles
+    const recentCandles = candles.slice(-30);
+    const currentPrice = candles[candles.length - 1].close;
+    const highestHigh = Math.max(...recentCandles.map(c => c.high));
+    const lowestLow = Math.min(...recentCandles.map(c => c.low));
+    const avgVolume = recentCandles.reduce((sum, c) => sum + c.volume, 0) / recentCandles.length;
+    const lastCandle = candles[candles.length - 1];
+    const prevCandle = candles[candles.length - 2];
+
+    // Format candles for prompt
+    const candleData = recentCandles.slice(-20).map(c =>
+        `[${new Date(c.time).toISOString().substr(11, 5)}] O:${c.open.toFixed(4)} H:${c.high.toFixed(4)} L:${c.low.toFixed(4)} C:${c.close.toFixed(4)} V:${c.volume.toFixed(0)}`
+    ).join('\n');
+
+    if (!model) {
+        return generateMockTradeSetup(symbol, currentPrice, assetType);
+    }
+
+    try {
+        const prompt = `You are a Master Trader AI with encyclopedic knowledge of "The Candlestick Trading Bible" by Munehisa Homma and advanced Price Action analysis.
+
+ASSET: ${symbol} (${assetType.toUpperCase()})
+TIMEFRAME: ${timeframe}
+CURRENT PRICE: ${currentPrice.toFixed(4)}
+RANGE: High ${highestHigh.toFixed(4)} | Low ${lowestLow.toFixed(4)}
+AVG VOLUME: ${avgVolume.toFixed(0)}
+
+RECENT OHLCV DATA:
+${candleData}
+
+ANALYSIS REQUIREMENTS:
+1. Identify Market Structure: Is price making Higher Highs/Higher Lows (uptrend), Lower Highs/Lower Lows (downtrend), or ranging?
+2. Identify Candlestick Patterns from "The Candlestick Trading Bible": Engulfing, Pin Bars (Hammer/Shooting Star), Morning/Evening Star, Doji, etc.
+3. Determine Support & Resistance levels from the data.
+4. Calculate Risk/Reward ratio.
+
+Return a STRICT JSON response (NO markdown, NO backticks) with this EXACT structure:
+{
+  "signal": "BUY" | "SELL" | "WAIT",
+  "confidence": 1-100,
+  "currentPrice": ${currentPrice},
+  "pattern": "Specific pattern name (e.g., Bullish Engulfing at Key Support)",
+  "patternDescription": "Detailed explanation of the pattern found and its significance",
+  "marketStructure": "Detailed description of trend, key levels, and market phase",
+  "entry": number (precise entry price based on the pattern),
+  "stopLoss": number (placed below/above key structure),
+  "takeProfit": number (based on next resistance/support or R:R ratio),
+  "riskRewardRatio": "e.g., 1:2.5",
+  "keyLevels": {
+    "resistance": [number, number],
+    "support": [number, number]
+  },
+  "whyEnter": "Detailed explanation of WHY this is a good entry. Reference specific candles, patterns from The Candlestick Trading Bible, and market structure.",
+  "riskFactors": ["List of 2-3 risk factors to watch"],
+  "technicalNotes": "Any additional technical observations (divergences, volume analysis, etc.)",
+  "reasoning": "One-liner summary using anti-gravity/levitation metaphors"
+}
+
+RULES:
+- If signal is "WAIT", set entry/stopLoss/takeProfit to null.
+- Be PRECISE with entry/SL/TP based on the actual highs/lows provided.
+- Use anti-gravity metaphors: "Refueling for lift-off", "Gravity test at support successful", "Atmospheric resistance detected", "Price entering zero-gravity zone".
+- Reference "The Candlestick Trading Bible" patterns explicitly.`;
+
+        const result = await model.generateContent(prompt);
+        const responseText = result.response.text();
+
+        // Clean markdown code blocks if present
+        const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const analysis = JSON.parse(cleanText);
+
+        return {
+            ...analysis,
+            currentPrice,
+            highestHigh,
+            lowestLow,
+            avgVolume,
+            timestamp: Date.now(),
+            dataSource: 'live'
+        };
+
+    } catch (error) {
+        console.error('Gemini Trade Analysis Error:', error.message);
+        return generateMockTradeSetup(symbol, currentPrice, assetType);
+    }
+}
+
+function generateMockTradeSetup(symbol, price, assetType = 'crypto') {
+    const type = Math.random() > 0.5 ? 'BUY' : 'SELL';
+    const range = assetType === 'forex' ? price * 0.005 : price * 0.02;
+
+    return {
+        signal: type,
+        confidence: Math.floor(Math.random() * 30) + 60,
+        currentPrice: price,
+        pattern: type === 'BUY' ? 'Bullish Engulfing at Support' : 'Bearish Engulfing at Resistance',
+        patternDescription: `Simulated ${type === 'BUY' ? 'bullish' : 'bearish'} pattern detected at key level.`,
+        marketStructure: type === 'BUY'
+            ? 'Price is creating Higher Highs and Higher Lows, indicating an uptrend. Currently retesting previous resistance as new support.'
+            : 'Price is making Lower Highs and Lower Lows, indicating a downtrend. Currently retesting previous support as new resistance.',
+        entry: price,
+        stopLoss: type === 'BUY' ? price - range : price + range,
+        takeProfit: type === 'BUY' ? price + (range * 2) : price - (range * 2),
+        riskRewardRatio: '1:2',
+        keyLevels: {
+            resistance: [price + range, price + (range * 1.5)],
+            support: [price - range, price - (range * 1.5)]
+        },
+        whyEnter: `[SIMULATION MODE] This is a demonstration trade setup. In live mode, the AI would analyze the actual candlestick patterns from The Candlestick Trading Bible and provide specific entry reasoning based on market structure.`,
+        riskFactors: [
+            'High volatility environment',
+            'Potential news events pending',
+            'Volume divergence observed'
+        ],
+        technicalNotes: 'Simulated analysis - enable Gemini API for live AI insights.',
+        reasoning: type === 'BUY'
+            ? 'Price has refueled at support and is preparing for anti-gravity lift-off.'
+            : 'Gravity is pulling price down, atmospheric resistance broken.',
+        timestamp: Date.now(),
+        dataSource: 'simulation'
+    };
+}
+
 export { generateRuleBasedAnalysis };

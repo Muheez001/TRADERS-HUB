@@ -6,13 +6,21 @@ A real-time trading intelligence platform with AI-powered market analysis, live 
 
 ## ✨ Features
 
+### 🧠 AI Market Insights (NEW!)
+- **Smart Trade Setups** - AI-generated Entry, Stop Loss, and Take Profit levels
+- **Pattern Recognition** - Candlestick patterns from "The Candlestick Trading Bible"
+- **Market Structure Analysis** - Trend identification (HH/HL, LH/LL, ranging)
+- **Risk Assessment** - Confidence scores and risk factors
+- **Multi-Asset Support** - Both Crypto and Forex pairs
+- **"Why Long/Short?"** - Detailed reasoning for every signal
+
 ### 📰 Real-Time Market Intelligence
 - **Live News Feed** - Crypto news from NewsData.io with AI sentiment analysis
 - **Gemini AI Insights** - Market impact predictions powered by Google Gemini
 
 ### 💰 Live Price Tracking
-- **Cryptocurrencies** - 12 coins via CoinGecko (BTC, ETH, SOL, XRP, ADA, BNB, DOGE, AVAX, LINK, DOT, MATIC, ATOM)
-- **Forex Pairs** - Major currency pairs (USD/JPY, EUR/USD, GBP/USD, etc.)
+- **Cryptocurrencies** - 12 coins via CoinGecko/Binance (BTC, ETH, SOL, XRP, ADA, BNB, DOGE, AVAX, LINK, DOT, MATIC, ATOM)
+- **Forex Pairs** - Major pairs, crosses, and metals (EUR/USD, XAU/USD, GBP/JPY, etc.)
 - **Commodities** - Real-time Gold, Silver, Oil prices via Yahoo Finance
 
 ### 📈 TradingView Charts
@@ -35,7 +43,7 @@ A real-time trading intelligence platform with AI-powered market analysis, live 
 | React 18 + Vite | Node.js + Express |
 | Tailwind CSS | Socket.io |
 | Framer Motion | Google Gemini AI |
-| Lucide Icons | NewsData.io / CoinGecko / Yahoo Finance |
+| Lucide Icons | Binance / CoinGecko / Twelve Data |
 
 ## 🚀 Quick Start
 
@@ -46,8 +54,8 @@ A real-time trading intelligence platform with AI-powered market analysis, live 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/yourusername/trader-hub.git
-cd trader-hub
+git clone https://github.com/Muheez001/TRADERS-HUB.git
+cd TRADERS-HUB
 
 # Install server dependencies
 cd server
@@ -70,11 +78,16 @@ cp .env.example .env
 Edit `server/.env` with your API keys:
 
 ```env
-# Required
+# Required for AI Analysis
 GEMINI_API_KEY=your_gemini_key
+
+# News Feed
 NEWSDATA_API_KEY=your_newsdata_key
 
-# Optional (fallbacks)
+# Optional - Forex Data (for live forex candles)
+TWELVE_DATA_API_KEY=your_twelve_data_key
+
+# Optional fallbacks
 NEWS_API_KEY=your_newsapi_key
 COINMARKETCAP_API_KEY=your_cmc_key
 
@@ -102,31 +115,27 @@ Navigate to `http://localhost:5173`
 ## 📁 Project Structure
 
 ```
-trader-hub/
+TRADERS-HUB/
 ├── client/                     # React Frontend
 │   ├── src/
-│   │   ├── components/         # UI Components
+│   │   ├── components/
+│   │   │   ├── AIInsights.jsx  # 🆕 AI Trade Analysis
 │   │   │   ├── Navbar.jsx
 │   │   │   ├── NewsFeed.jsx
 │   │   │   ├── PriceGrid.jsx
-│   │   │   ├── PriceTicker.jsx
 │   │   │   ├── TradingViewChart.jsx
-│   │   │   ├── ChatWidget.jsx
-│   │   │   └── ParticleBackground.jsx
+│   │   │   └── ChatWidget.jsx
 │   │   ├── context/
-│   │   │   └── ThemeContext.jsx
 │   │   ├── hooks/
-│   │   │   └── useSocket.js
 │   │   ├── App.jsx
-│   │   ├── main.jsx
 │   │   └── index.css
 │   └── package.json
 │
 ├── server/                     # Node.js Backend
 │   ├── services/
-│   │   ├── dataFetcher.js      # API integrations
-│   │   └── aiAnalyst.js        # Gemini AI
-│   ├── index.js                # Express + Socket.io
+│   │   ├── dataFetcher.js      # Binance, CoinGecko, Twelve Data
+│   │   └── aiAnalyst.js        # Gemini AI Analysis
+│   ├── index.js
 │   ├── .env.example
 │   └── package.json
 │
@@ -141,6 +150,7 @@ trader-hub/
 | `/api/news` | GET | Fetch cached news |
 | `/api/prices` | GET | All prices (crypto/forex/commodities) |
 | `/api/prices/:type` | GET | Prices by type |
+| `/api/insights/:symbol/:timeframe` | GET | 🆕 AI trade analysis |
 
 ## 📡 WebSocket Events
 
@@ -155,10 +165,11 @@ trader-hub/
 
 | Service | Free Tier | Get Key |
 |---------|-----------|---------|
+| Google Gemini | 1,500 req/day | [aistudio.google.com](https://aistudio.google.com) |
 | NewsData.io | 200 req/day | [newsdata.io](https://newsdata.io) |
-| Google Gemini | Free tier | [aistudio.google.com](https://aistudio.google.com) |
+| Twelve Data | 800 req/day | [twelvedata.com](https://twelvedata.com) |
 | CoinGecko | Unlimited (rate-limited) | No key needed |
-| Yahoo Finance | Unlimited | No key needed |
+| Binance | Unlimited | No key needed |
 | TradingView | Unlimited | Widget, no key needed |
 
 ## ⚠️ Disclaimer

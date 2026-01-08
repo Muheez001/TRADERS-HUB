@@ -7,6 +7,7 @@ import PriceGrid from './components/PriceGrid';
 import ChatWidget from './components/ChatWidget';
 import ParticleBackground from './components/ParticleBackground';
 import TradingViewChart from './components/TradingViewChart';
+import AIInsights from './components/AIInsights';
 import { useSocket } from './hooks/useSocket';
 
 function App() {
@@ -69,6 +70,18 @@ function App() {
                             transition={{ duration: 0.3 }}
                         >
                             <TradingViewChart />
+                        </motion.div>
+                    )}
+
+                    {activeTab === 'insights' && (
+                        <motion.div
+                            key="insights"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            transition={{ duration: 0.3 }}
+                        >
+                            <AIInsights />
                         </motion.div>
                     )}
                     {activeTab === 'chat' && (

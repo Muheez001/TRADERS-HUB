@@ -11,9 +11,11 @@ dotenv.config();
 const NEWS_API_KEY = process.env.NEWS_API_KEY;
 const NEWSDATA_API_KEY = process.env.NEWSDATA_API_KEY;
 const CMC_API_KEY = process.env.COINMARKETCAP_API_KEY;
+const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
 const NEWS_API_BASE = 'https://newsapi.org/v2';
 const NEWSDATA_API_BASE = 'https://newsdata.io/api/1';
 const CMC_API_BASE = 'https://pro-api.coinmarketcap.com/v1';
+const TWELVE_DATA_BASE = 'https://api.twelvedata.com';
 
 /**
  * Fetch crypto news from NewsData.io (Primary - Free tier: 200 req/day)
@@ -306,3 +308,260 @@ function fetchCommodityPricesFallback() {
     return prices;
 }
 
+
+/**
+ * Fetch OHLCV Candle data - tries Binance first, then CoinGecko as fallback
+ * @param {string} symbol - Crypto symbol (e.g., 'BTC')
+ * @param {string} interval - Timeframe (e.g., '1h', '4h', '15m')
+ */
+export async function fetchCandles(symbol, interval = '1h') {
+    const upperSymbol = symbol.toUpperCase();
+
+    // Try Binance first
+    try {
+        const binanceSymbol = `${upperSymbol}USDT`;
+        console.log(`🕯️ Trying Binance for ${binanceSymbol} ${interval}...`);
+
+        const response = await axios.get('https://api.binance.com/api/v3/klines', {
+            params: {
+                symbol: binanceSymbol,
+                interval: interval,
+                limit: 60
+            },
+            timeout: 8000
+        });
+
+        if (Array.isArray(response.data) && response.data.length > 0) {
+            console.log('✅ Binance candles fetched successfully');
+            return response.data.map(c => ({
+                time: c[0],
+                open: parseFloat(c[1]),
+                high: parseFloat(c[2]),
+                low: parseFloat(c[3]),
+                close: parseFloat(c[4]),
+                volume: parseFloat(c[5])
+            }));
+        }
+        throw new Error('Empty Binance response');
+    } catch (binanceError) {
+        console.error('Binance Error:', binanceError.message);
+    }
+
+    // Fallback to CoinGecko OHLC
+    try {
+        console.log(`🕯️ Trying CoinGecko OHLC for ${upperSymbol}...`);
+
+        // Map symbol to CoinGecko ID
+        const coinGeckoIds = {
+            'BTC': 'bitcoin',
+            'ETH': 'ethereum',
+            'SOL': 'solana',
+            'XRP': 'ripple',
+            'ADA': 'cardano',
+            'BNB': 'binancecoin',
+            'DOGE': 'dogecoin',
+            'AVAX': 'avalanche-2',
+            'LINK': 'chainlink',
+            'DOT': 'polkadot'
+        };
+
+        const coinId = coinGeckoIds[upperSymbol] || upperSymbol.toLowerCase();
+
+        // CoinGecko OHLC: days parameter (1=30min, 7=4h, 14=4h, 30=4h, 90=4h, 180=4d, 365=4d, max=4d)
+        // We'll use 1 day for 1h-ish data, 7 days for 4h
+        const days = interval === '4h' ? 7 : 1;
+
+        const response = await axios.get(`https://api.coingecko.com/api/v3/coins/${coinId}/ohlc`, {
+            params: {
+                vs_currency: 'usd',
+                days: days
+            },
+            timeout: 10000
+        });
+
+        if (Array.isArray(response.data) && response.data.length > 0) {
+            console.log('✅ CoinGecko OHLC fetched successfully');
+            // CoinGecko OHLC format: [timestamp, open, high, low, close]
+            return response.data.slice(-60).map(c => ({
+                time: c[0],
+                open: c[1],
+                high: c[2],
+                low: c[3],
+                close: c[4],
+                volume: 0 // CoinGecko OHLC doesn't include volume
+            }));
+        }
+        throw new Error('Empty CoinGecko response');
+    } catch (geckoError) {
+        console.error('CoinGecko OHLC Error:', geckoError.message);
+    }
+
+    // Last resort: Get current price and generate realistic mock data
+    console.log('⚠️ All APIs failed, generating mock data with current price...');
+    return await generateRealisticMockCandles(upperSymbol, interval);
+}
+
+/**
+ * Fallback: Generate realistic mock candles using current price from CoinGecko
+ */
+async function generateRealisticMockCandles(symbol, interval) {
+    // Try to get current price first
+    let currentPrice = 50000; // Default fallback
+
+    try {
+        const coinGeckoIds = {
+            'BTC': 'bitcoin', 'ETH': 'ethereum', 'SOL': 'solana', 'XRP': 'ripple',
+            'ADA': 'cardano', 'BNB': 'binancecoin', 'DOGE': 'dogecoin',
+            'AVAX': 'avalanche-2', 'LINK': 'chainlink', 'DOT': 'polkadot'
+        };
+        const coinId = coinGeckoIds[symbol] || 'bitcoin';
+
+        const response = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
+            params: { ids: coinId, vs_currencies: 'usd' },
+            timeout: 5000
+        });
+
+        if (response.data && response.data[coinId]) {
+            currentPrice = response.data[coinId].usd;
+            console.log(`📊 Got current ${symbol} price: $${currentPrice}`);
+        }
+    } catch (e) {
+        console.log('Could not fetch current price, using default');
+    }
+
+    const candles = [];
+    let price = currentPrice * 0.98; // Start slightly below current
+    const now = Date.now();
+    const intervalMs = {
+        '15m': 15 * 60 * 1000,
+        '30m': 30 * 60 * 1000,
+        '1h': 60 * 60 * 1000,
+        '4h': 4 * 60 * 60 * 1000
+    }[interval] || 60 * 60 * 1000;
+
+    for (let i = 59; i >= 0; i--) {
+        const volatility = price * 0.008; // 0.8% volatility
+        const trend = (currentPrice - price) / 60 * (60 - i); // Trend towards current
+        const change = (Math.random() - 0.5) * volatility + trend * 0.1;
+        const open = price;
+        const close = price + change;
+        const high = Math.max(open, close) + Math.random() * (volatility * 0.3);
+        const low = Math.min(open, close) - Math.random() * (volatility * 0.3);
+        const volume = Math.random() * 1000000;
+
+        candles.push({
+            time: now - (i * intervalMs),
+            open, high, low, close, volume
+        });
+
+        price = close;
+    }
+
+    return candles;
+}
+
+/**
+ * Fetch Forex OHLCV Candle data from Twelve Data API
+ * @param {string} pair - Forex pair (e.g., 'EUR/USD')
+ * @param {string} interval - Timeframe (e.g., '1h', '4h', '15min')
+ */
+export async function fetchForexCandles(pair, interval = '1h') {
+    // Map interval to Twelve Data format
+    const intervalMap = {
+        '15m': '15min',
+        '30m': '30min',
+        '1h': '1h',
+        '4h': '4h'
+    };
+    const tdInterval = intervalMap[interval] || '1h';
+
+    // Format pair for Twelve Data (EUR/USD -> EUR/USD)
+    const formattedPair = pair.replace('/', '/');
+
+    try {
+        if (!TWELVE_DATA_API_KEY) {
+            console.log('⚠️ No Twelve Data API key, using mock forex data');
+            return generateMockForexCandles(pair, interval);
+        }
+
+        console.log(`💱 Fetching forex candles for ${formattedPair} ${tdInterval}...`);
+
+        const response = await axios.get(`${TWELVE_DATA_BASE}/time_series`, {
+            params: {
+                symbol: formattedPair,
+                interval: tdInterval,
+                outputsize: 60,
+                apikey: TWELVE_DATA_API_KEY
+            },
+            timeout: 15000
+        });
+
+        if (response.data?.values && Array.isArray(response.data.values)) {
+            // Twelve Data returns newest first, so reverse it
+            const candles = response.data.values.reverse().map(c => ({
+                time: new Date(c.datetime).getTime(),
+                open: parseFloat(c.open),
+                high: parseFloat(c.high),
+                low: parseFloat(c.low),
+                close: parseFloat(c.close),
+                volume: parseFloat(c.volume) || 0
+            }));
+
+            console.log('✅ Twelve Data forex candles fetched successfully');
+            return candles;
+        }
+
+        throw new Error('Invalid Twelve Data response');
+
+    } catch (error) {
+        console.error('Twelve Data Error:', error.message);
+        return generateMockForexCandles(pair, interval);
+    }
+}
+
+/**
+ * Fallback: Generate mock forex candles
+ */
+function generateMockForexCandles(pair, interval) {
+    console.log('⚠️ Generating mock forex candles for', pair);
+    const candles = [];
+
+    // Base prices for common forex pairs
+    const basePrices = {
+        'EUR/USD': 1.0350,
+        'GBP/USD': 1.2580,
+        'USD/JPY': 157.50,
+        'USD/CHF': 0.9030,
+        'AUD/USD': 0.6240,
+        'USD/CAD': 1.3600,
+        'NZD/USD': 0.5650
+    };
+
+    let price = basePrices[pair] || 1.0000;
+    const now = Date.now();
+    const intervalMs = {
+        '15m': 15 * 60 * 1000,
+        '30m': 30 * 60 * 1000,
+        '1h': 60 * 60 * 1000,
+        '4h': 4 * 60 * 60 * 1000
+    }[interval] || 60 * 60 * 1000;
+
+    for (let i = 59; i >= 0; i--) {
+        const volatility = price * 0.001; // 0.1% volatility for forex
+        const change = (Math.random() - 0.5) * volatility;
+        const open = price;
+        const close = price + change;
+        const high = Math.max(open, close) + Math.random() * (volatility * 0.5);
+        const low = Math.min(open, close) - Math.random() * (volatility * 0.5);
+        const volume = Math.random() * 10000;
+
+        candles.push({
+            time: now - (i * intervalMs),
+            open, high, low, close, volume
+        });
+
+        price = close;
+    }
+
+    return candles;
+}
