@@ -1,1 +1,1 @@
-pinecone private key = pcsk_5a3Yvo_99jxXnkTdW8C6tUvRgYAu7D1rGPURAKBgfsZWv2zL2NSW1ZLaYGZdp2ZbtDUBnq
+pinecone private key =
