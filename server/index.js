@@ -12,6 +12,8 @@ import cron from 'node-cron';
 
 import { fetchNews, fetchCryptoPrices, fetchForexPrices, fetchCommodityPrices, fetchCandles, fetchForexCandles } from './services/dataFetcher.js';
 import { analyzeNewsImpact, analyzeMarketStructure } from './services/aiAnalyst.js';
+import { initializeVectorStore } from './services/vectorStore.js';
+import knowledgeRoutes from './routes/knowledgeRoutes.js';
 
 dotenv.config();
 
@@ -60,6 +62,9 @@ app.get('/api/prices/:type', (req, res) => {
         res.status(404).json({ success: false, message: 'Price type not found' });
     }
 });
+
+// Knowledge Base Routes
+app.use('/api/knowledge', knowledgeRoutes);
 
 /**
  * Enhanced Insights API - Supports both Crypto and Forex
@@ -137,21 +142,44 @@ async function updateNews() {
         const newsData = await fetchNews();
 
         if (newsData && newsData.length > 0) {
-            // Analyze each news item with AI
-            const analyzedNews = await Promise.all(
-                newsData.slice(0, 10).map(async (article) => {
-                    const analysis = await analyzeNewsImpact(article.title, article.description);
-                    return { ...article, aiAnalysis: analysis };
-                })
-            );
+            // ⚠️ AI Analysis DISABLED to preserve API quota for AI Insights & document embeddings
+            // Use rule-based sentiment instead
+            const analyzedNews = newsData.slice(0, 10).map(article => {
+                const aiAnalysis = generateRuleBasedSentiment(article.title, article.description);
+                return { ...article, aiAnalysis };
+            });
 
             cachedNews = analyzedNews;
             io.emit('newsUpdate', cachedNews);
-            console.log(`✅ News updated: ${cachedNews.length} articles`);
+            console.log(`✅ News updated: ${cachedNews.length} articles (no AI quota used)`);
         }
     } catch (error) {
         console.error('❌ News fetch error:', error.message);
     }
+}
+
+// Simple rule-based sentiment (no API usage)
+function generateRuleBasedSentiment(title, description) {
+    const text = `${title} ${description}`.toLowerCase();
+
+    const bullishKeywords = ['surge', 'rally', 'gain', 'rise', 'bullish', 'growth', 'profit', 'breakthrough', 'ATH', 'pump'];
+    const bearishKeywords = ['crash', 'plunge', 'fall', 'drop', 'bearish', 'loss', 'decline', 'crisis', 'dump', 'selloff'];
+
+    let bullishScore = bullishKeywords.filter(kw => text.includes(kw)).length;
+    let bearishScore = bearishKeywords.filter(kw => text.includes(kw)).length;
+
+    let sentiment = 'neutral';
+    if (bullishScore > bearishScore) sentiment = 'bullish';
+    else if (bearishScore > bullishScore) sentiment = 'bearish';
+
+    const impactScore = Math.min(10, Math.max(3, bullishScore + bearishScore + 3));
+
+    return {
+        sentiment,
+        impactScore,
+        affectedAssets: ['MARKET'],
+        opinion: `${sentiment.toUpperCase()} sentiment detected - API quota saved for AI Insights.`
+    };
 }
 
 async function updatePrices() {
@@ -304,7 +332,7 @@ cron.schedule('*/30 * * * * *', () => {
 });
 
 // Start Server
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
     console.log(`
   ╔═══════════════════════════════════════════════════╗
   ║                                                   ║
@@ -318,6 +346,15 @@ httpServer.listen(PORT, () => {
 
     // Initialize demo data on startup
     initializeDemoData();
+
+    // Initialize Vector Store for RAG
+    console.log('🧠 Initializing Vector Store...');
+    try {
+        await initializeVectorStore();
+    } catch (error) {
+        console.log('⚠️  Vector Store initialization skipped (ChromaDB not running)');
+        console.log('   To enable RAG features, run: docker run -p 8000:8000 chromadb/chroma');
+    }
 
     // Attempt initial fetch (will use demo data if APIs fail)
     updateNews().catch(() => console.log('Using demo news data'));

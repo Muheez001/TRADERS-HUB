@@ -5,6 +5,7 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
+import { searchDocuments, getStats } from './vectorStore.js';
 
 dotenv.config();
 
@@ -15,7 +16,9 @@ let model = null;
 // Initialize Gemini if API key is available
 if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here') {
     genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    model = genAI.getGenerativeModel({ model: 'models/gemini-2.0-flash' });
+    // Upgraded to Gemini 3 Flash (preview) for 2x faster performance and Pro-level reasoning
+    model = genAI.getGenerativeModel({ model: 'models/gemini-3-flash-preview' });
+    console.log('✅ Gemini 3 Flash (Preview) initialized successfully');
 }
 
 /**
@@ -171,8 +174,30 @@ export async function analyzeMarketStructure(symbol, timeframe, candles, assetTy
     }
 
     try {
-        const prompt = `You are a Master Trader AI with encyclopedic knowledge of "The Candlestick Trading Bible" by Munehisa Homma and advanced Price Action analysis.
+        // --- RAG ENHANCEMENT: Retrieve relevant trading knowledge ---
+        let knowledgeContext = '';
+        try {
+            const stats = await getStats();
+            if (stats.initialized && stats.documentCount > 0) {
+                // Search for relevant candlestick patterns and trading knowledge
+                const searchQuery = `candlestick patterns ${symbol} ${assetType} trading analysis market structure`;
+                const relevantDocs = await searchDocuments(searchQuery, 3);
 
+                if (relevantDocs && relevantDocs.length > 0) {
+                    knowledgeContext = '\n=== RELEVANT TRADING KNOWLEDGE ===\n';
+                    relevantDocs.forEach((doc, idx) => {
+                        knowledgeContext += `Document ${idx + 1} (Source: ${doc.metadata?.source || 'Unknown'}):\n${doc.text}\n\n`;
+                    });
+                    knowledgeContext += '=== END KNOWLEDGE ===\n';
+                    console.log(`✨ RAG Enhanced: Retrieved ${relevantDocs.length} knowledge chunks`);
+                }
+            }
+        } catch (ragError) {
+            // RAG is optional - continue without it if it fails
+            console.log('⚠️  RAG retrieval skipped:', ragError.message);
+        }
+        const prompt = `You are a Master Trader AI with encyclopedic knowledge of "The Candlestick Trading Bible" by Munehisa Homma and advanced Price Action analysis.
+${knowledgeContext}
 ASSET: ${symbol} (${assetType.toUpperCase()})
 TIMEFRAME: ${timeframe}
 CURRENT PRICE: ${currentPrice.toFixed(4)}
@@ -181,6 +206,8 @@ AVG VOLUME: ${avgVolume.toFixed(0)}
 
 RECENT OHLCV DATA:
 ${candleData}
+
+${knowledgeContext ? 'Use the trading knowledge provided above to inform your analysis. Reference specific patterns, chapters, or concepts from the documents when applicable.' : ''}
 
 ANALYSIS REQUIREMENTS:
 1. Identify Market Structure: Is price making Higher Highs/Higher Lows (uptrend), Lower Highs/Lower Lows (downtrend), or ranging?
@@ -204,7 +231,7 @@ Return a STRICT JSON response (NO markdown, NO backticks) with this EXACT struct
     "resistance": [number, number],
     "support": [number, number]
   },
-  "whyEnter": "Detailed explanation of WHY this is a good entry. Reference specific candles, patterns from The Candlestick Trading Bible, and market structure.",
+  "whyEnter": "Detailed explanation of WHY this is a good entry. Reference specific candles, patterns${knowledgeContext ? ', knowledge from uploaded documents,' : ''} from The Candlestick Trading Bible, and market structure.",
   "riskFactors": ["List of 2-3 risk factors to watch"],
   "technicalNotes": "Any additional technical observations (divergences, volume analysis, etc.)",
   "reasoning": "One-liner summary using anti-gravity/levitation metaphors"
@@ -214,7 +241,7 @@ RULES:
 - If signal is "WAIT", set entry/stopLoss/takeProfit to null.
 - Be PRECISE with entry/SL/TP based on the actual highs/lows provided.
 - Use anti-gravity metaphors: "Refueling for lift-off", "Gravity test at support successful", "Atmospheric resistance detected", "Price entering zero-gravity zone".
-- Reference "The Candlestick Trading Bible" patterns explicitly.`;
+- Reference "The Candlestick Trading Bible" patterns explicitly.${knowledgeContext ? '\n- Cite specific sources from the knowledge base when applicable.' : ''}`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
