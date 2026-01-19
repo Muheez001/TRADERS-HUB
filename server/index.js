@@ -74,8 +74,9 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
     try {
         const { symbol, timeframe } = req.params;
         const assetType = req.query.type || 'crypto';
+        const accountSize = req.query.accountSize || 500;
 
-        console.log(`🔍 Analyzing ${symbol} (${assetType}) on ${timeframe}...`);
+        console.log(`🔍 Analyzing ${symbol} (${assetType}) on ${timeframe} for $${accountSize} account...`);
 
         let candles;
         let cleanSymbol = symbol;
@@ -93,8 +94,8 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
             candles = await fetchCandles(cleanSymbol, timeframe);
         }
 
-        // Perform AI Analysis with asset type context
-        const analysis = await analyzeMarketStructure(cleanSymbol, timeframe, candles, assetType);
+        // Perform AI Analysis with asset type context and account size
+        const analysis = await analyzeMarketStructure(cleanSymbol, timeframe, candles, assetType, accountSize);
 
         res.json({
             success: true,

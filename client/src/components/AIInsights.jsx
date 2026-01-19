@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
     BarChart2, TrendingUp, TrendingDown, AlertTriangle, Terminal, Target, Shield, Zap,
-    Activity, Clock, DollarSign, Layers, AlertCircle, XCircle
+    Activity, Clock, DollarSign, Layers, AlertCircle, XCircle, Wallet
 } from 'lucide-react';
+import RiskCalculator from './RiskCalculator';
 
 const CRYPTO_ASSETS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'BNB', 'AVAX', 'LINK', 'DOT'];
 const FOREX_PAIRS = [
@@ -25,6 +26,15 @@ const AIInsights = () => {
     const [loading, setLoading] = useState(false);
     const [data, setData] = useState(null);
     const [error, setError] = useState(null);
+    const [accountSize, setAccountSize] = useState(() => {
+        const saved = localStorage.getItem('tradingCapital');
+        return saved ? parseFloat(saved) : 500;
+    });
+
+    // Sync accountSize with localStorage
+    useEffect(() => {
+        localStorage.setItem('tradingCapital', accountSize.toString());
+    }, [accountSize]);
 
     const assets = assetType === 'crypto' ? CRYPTO_ASSETS : FOREX_PAIRS;
 
@@ -37,7 +47,7 @@ const AIInsights = () => {
         setLoading(true);
         setError(null);
         try {
-            const url = `http://localhost:3001/api/insights/${selectedAsset}/${selectedTimeframe}?type=${assetType}`;
+            const url = `http://localhost:3001/api/insights/${selectedAsset}/${selectedTimeframe}?type=${assetType}&accountSize=${accountSize}`;
             console.log('Fetching:', url);
             const response = await fetch(url);
             const result = await response.json();
@@ -75,7 +85,8 @@ const AIInsights = () => {
         }
     };
 
-    const getSignalBg = (signal) => {
+    const getSignalBg = (signal, dataSource) => {
+        if (dataSource === 'technical') return 'bg-blue-500/10 border-blue-500/30';
         switch (signal) {
             case 'BUY': return 'bg-emerald-500/10 border-emerald-500/30';
             case 'SELL': return 'bg-red-500/10 border-red-500/30';
@@ -150,6 +161,47 @@ const AIInsights = () => {
                         </button>
                     </div>
                 </div>
+
+                {/* Account Size Configuration */}
+                <div className="mt-6 pt-6 border-t border-white/5 flex flex-wrap items-center gap-6">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-blue-500/10 p-2 rounded-lg">
+                            <Wallet className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block">Account Size</label>
+                            <div className="flex items-center gap-2">
+                                <span className="text-gray-400 font-bold">$</span>
+                                <input
+                                    type="number"
+                                    value={accountSize}
+                                    onChange={(e) => setAccountSize(Math.max(0, parseFloat(e.target.value) || 0))}
+                                    className="bg-transparent border-none text-white font-bold text-lg w-24 focus:outline-none"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="h-10 w-px bg-white/5 hidden md:block" />
+
+                    <div className="flex-1">
+                        <p className="text-xs text-gray-500 mb-2">The AI will tailor recommendations based on your capital. <span className="text-purple-400 font-medium italic">Example: A $15 account requires different risk management than a $10,000 account.</span></p>
+                        <div className="flex gap-2">
+                            {[15, 100, 500, 1000, 5000].map(v => (
+                                <button
+                                    key={v}
+                                    onClick={() => setAccountSize(v)}
+                                    className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${accountSize === v
+                                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                                        : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
+                                        }`}
+                                >
+                                    ${v}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Error State */}
@@ -211,9 +263,13 @@ const AIInsights = () => {
                                 }`}>
                                 <div className="flex items-center justify-between mb-4">
                                     <span className="text-xs text-gray-500 uppercase tracking-wider">Signal</span>
-                                    <span className={`text-xs px-2 py-1 rounded-full ${data.analysis.dataSource === 'live' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                                    <span className={`text-xs px-2 py-1 rounded-full ${data.analysis.dataSource === 'live' ? 'bg-green-500/20 text-green-400' :
+                                            data.analysis.dataSource === 'technical' ? 'bg-blue-500/20 text-blue-400' :
+                                                'bg-yellow-500/20 text-yellow-400'
                                         }`}>
-                                        {data.analysis.dataSource === 'live' ? 'AI Live' : 'Simulation'}
+                                        {data.analysis.dataSource === 'live' ? 'AI Live' :
+                                            data.analysis.dataSource === 'technical' ? 'Technical Engine' :
+                                                'Simulation'}
                                     </span>
                                 </div>
 
@@ -232,6 +288,26 @@ const AIInsights = () => {
                                     <span className="text-white font-bold">{data.analysis.confidence}%</span>
                                 </div>
                             </div>
+
+                            {/* Tailored Recommendation - NEW */}
+                            {data.analysis.tailoredSetup && (
+                                <motion.div
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="glass-panel p-5 rounded-2xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.1)]"
+                                >
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Zap className="w-5 h-5 text-yellow-400" />
+                                        <h4 className="text-sm font-bold text-white uppercase tracking-wider">Tailored Recommendation</h4>
+                                    </div>
+                                    <p className="text-gray-200 text-[13px] leading-relaxed border-l-2 border-purple-500 pl-4 py-1 italic">
+                                        {data.analysis.tailoredSetup}
+                                    </p>
+                                    <div className="mt-3 text-[10px] text-gray-500 flex items-center gap-1">
+                                        <Wallet className="w-3 h-3" /> Specifically calculated for your ${accountSize} balance
+                                    </div>
+                                </motion.div>
+                            )}
 
                             {/* Trade Levels */}
                             <div className="glass-panel p-5 rounded-2xl space-y-3">
@@ -353,7 +429,7 @@ const AIInsights = () => {
                             </h3>
 
                             <div className="space-y-4">
-                                <div className={`p-4 rounded-xl border ${getSignalBg(data.analysis.signal)}`}>
+                                <div className={`p-4 rounded-xl border ${getSignalBg(data.analysis.signal, data.analysis.dataSource)}`}>
                                     <p className="text-gray-200 text-sm leading-relaxed">
                                         {data.analysis.whyEnter}
                                     </p>
@@ -392,6 +468,17 @@ const AIInsights = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Risk Calculator */}
+                    <RiskCalculator
+                        entry={data.analysis.entry}
+                        stopLoss={data.analysis.stopLoss}
+                        takeProfit={data.analysis.takeProfit}
+                        symbol={selectedAsset}
+                        assetType={assetType}
+                        currentPrice={data.analysis.currentPrice}
+                        signal={data.analysis.signal}
+                    />
 
                     {/* Stats Bar */}
                     <div className="glass-panel p-4 rounded-xl">

@@ -534,7 +534,10 @@ function generateMockForexCandles(pair, interval) {
         'USD/CHF': 0.9030,
         'AUD/USD': 0.6240,
         'USD/CAD': 1.3600,
-        'NZD/USD': 0.5650
+        'NZD/USD': 0.5650,
+        'EUR/JPY': 163.40,
+        'GBP/JPY': 198.20,
+        'EUR/GBP': 0.8350
     };
 
     let price = basePrices[pair] || 1.0000;
