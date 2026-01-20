@@ -114,6 +114,9 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     return {
         signal,
         confidence,
+        mtcAlignment: 'Indicator Crossover (Single Timeframe Fallback)',
+        newsSentiment: 'Neutral',
+        newsImpact: 'News context unavailable in technical fallback mode.',
         currentPrice: last.close,
         pattern: signal === 'BUY' ? 'Golden Cross / Bullish Momentum' : signal === 'SELL' ? 'Death Cross / Bearish Momentum' : 'Consolidation',
         patternDescription: `Technical analysis based on EMA crossover and RSI momentum. Current RSI: ${rsi.toFixed(1)}.`,
