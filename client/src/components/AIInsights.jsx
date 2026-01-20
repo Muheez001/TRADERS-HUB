@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
     BarChart2, TrendingUp, TrendingDown, AlertTriangle, Terminal, Target, Shield, Zap,
-    Activity, Clock, DollarSign, Layers, AlertCircle, XCircle, Wallet
+    Activity, Clock, DollarSign, Layers, AlertCircle, XCircle, Wallet, Globe, Search, Sparkles,
+    History, CheckCircle2, Trophy, Info
 } from 'lucide-react';
 import RiskCalculator from './RiskCalculator';
 
@@ -36,12 +37,76 @@ const AIInsights = () => {
         localStorage.setItem('tradingCapital', accountSize.toString());
     }, [accountSize]);
 
+    // Paper Trading State
+    const [paperTrades, setPaperTrades] = useState(() => {
+        const saved = localStorage.getItem('paperTrades');
+        return saved ? JSON.parse(saved) : [];
+    });
+
+    const [paperWallet, setPaperWallet] = useState(() => {
+        const saved = localStorage.getItem('paperWallet');
+        return saved ? parseFloat(saved) : 10000; // Default $10k paper money
+    });
+
+    useEffect(() => {
+        localStorage.setItem('paperTrades', JSON.stringify(paperTrades));
+        localStorage.setItem('paperWallet', paperWallet.toString());
+    }, [paperTrades, paperWallet]);
+
+    const executeVirtualTrade = (setup) => {
+        const newTrade = {
+            id: Date.now(),
+            symbol: selectedAsset,
+            type: data.analysis.signal,
+            entry: data.analysis.entry,
+            tp: data.analysis.takeProfit,
+            sl: data.analysis.stopLoss,
+            timestamp: new Date().toLocaleString(),
+            status: 'OPEN'
+        };
+        setPaperTrades([newTrade, ...paperTrades]);
+        alert(`🚀 Virtual Trade Placed: ${data.analysis.signal} ${selectedAsset} at ${data.analysis.entry}`);
+    };
+
     const assets = assetType === 'crypto' ? CRYPTO_ASSETS : FOREX_PAIRS;
 
     useEffect(() => {
         setSelectedAsset(assetType === 'crypto' ? 'BTC' : 'EUR-USD');
         setData(null);
     }, [assetType]);
+
+    const [loadingStep, setLoadingStep] = useState(0);
+    const loadingSteps = [
+        "Initializing Quantum Core...",
+        "Scanning Multi-Timeframe Structure...",
+        "Cross-Referencing Global News Sentiment...",
+        "Calculating Risk-Adjusted Entry Vectors...",
+        "Finalizing Institutional-Grade Setup..."
+    ];
+
+    useEffect(() => {
+        let interval;
+        if (loading) {
+            setLoadingStep(0);
+            interval = setInterval(() => {
+                setLoadingStep(prev => (prev < loadingSteps.length - 1 ? prev + 1 : prev));
+            }, 800);
+        }
+        return () => clearInterval(interval);
+    }, [loading]);
+
+    const [layout, setLayout] = useState('BALANCED'); // BALANCED, DATA, CHART
+    const [activeTab, setActiveTab] = useState('STRUCTURE'); // STRUCTURE, LOGIC, HISTORY
+
+    // Save/Load layout
+    useEffect(() => {
+        const saved = localStorage.getItem('workspaceLayout');
+        if (saved) setLayout(saved);
+    }, []);
+
+    useEffect(() => {
+        localStorage.setItem('workspaceLayout', layout);
+    }, [layout]);
 
     const fetchAnalysis = async () => {
         setLoading(true);
@@ -95,419 +160,519 @@ const AIInsights = () => {
     };
 
     return (
-        <div className="w-full max-w-7xl mx-auto space-y-6">
-            {/* Header / Controls */}
-            <div className="glass-panel p-6 rounded-2xl">
-                <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-gradient-to-br from-purple-500 to-blue-600 p-4 rounded-2xl shadow-lg shadow-purple-500/20">
-                            <Terminal className="text-white w-7 h-7" />
+        <div className="hud-canvas w-full min-h-screen p-4 md:p-8">
+            <div className="max-w-[1600px] mx-auto space-y-6">
+                {/* Unified Terminal Navigation */}
+                <div className="glass-panel p-2 flex flex-col lg:flex-row items-center justify-between gap-4 overflow-x-auto ring-1 ring-white/5">
+                    <div className="flex items-center gap-6 px-4">
+                        <div className="flex items-center gap-3 border-r border-white/10 pr-6 mr-2">
+                            <div className="bg-purple-600/20 p-2 rounded-lg border border-purple-500/30">
+                                <Terminal className="text-purple-400 w-5 h-5" />
+                            </div>
+                            <div className="hidden sm:block">
+                                <h2 className="text-sm font-black text-white tracking-widest uppercase">Architect</h2>
+                                <p className="hud-label !text-[8px] opacity-60">Quantum Alpha v3.5</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-2xl font-bold text-white">AI Market Architect</h2>
-                            <p className="text-gray-400 text-sm">Powered by Gemini 2.0 // Candlestick Bible Analysis</p>
+
+                        <div className="flex items-center gap-4">
+                            {/* Asset Selectors */}
+                            <div className="flex bg-white/5 rounded-lg p-1 border border-white/5">
+                                {['crypto', 'forex'].map(type => (
+                                    <button
+                                        key={type}
+                                        onClick={() => setAssetType(type)}
+                                        className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${assetType === type ? 'bg-white/10 text-white' : 'text-dim hover:text-white'
+                                            }`}
+                                    >
+                                        {type}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <select
+                                value={selectedAsset}
+                                onChange={(e) => setSelectedAsset(e.target.value)}
+                                className="bg-white/5 border border-white/5 text-white text-[10px] font-black uppercase tracking-wider rounded-lg px-4 py-2 hover:bg-white/10 outline-none transition-all cursor-pointer"
+                            >
+                                {assets.map(a => (
+                                    <option key={a} value={a} className="bg-bg-deep">{assetType === 'crypto' ? `${a}/USDT` : a}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex bg-white/5 p-1 rounded-lg border border-white/5">
+                                {['15m', '1h', '4h'].map(tf => (
+                                    <button
+                                        key={tf}
+                                        onClick={() => setSelectedTimeframe(tf)}
+                                        className={`px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${selectedTimeframe === tf ? 'bg-purple-500 text-white' : 'text-dim hover:text-white'
+                                            }`}
+                                    >
+                                        {tf}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
-                        {/* Asset Type Toggle */}
-                        <div className="flex bg-black/40 rounded-lg p-1 border border-white/10">
-                            <button
-                                onClick={() => setAssetType('crypto')}
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${assetType === 'crypto' ? 'bg-purple-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'
-                                    }`}
-                            >
-                                Crypto
-                            </button>
-                            <button
-                                onClick={() => setAssetType('forex')}
-                                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${assetType === 'forex' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'
-                                    }`}
-                            >
-                                Forex
-                            </button>
-                        </div>
-
-                        <select
-                            value={selectedAsset}
-                            onChange={(e) => setSelectedAsset(e.target.value)}
-                            className="bg-black/40 border border-white/10 text-white rounded-lg px-4 py-2.5 focus:border-purple-500 outline-none min-w-[140px]"
-                        >
-                            {assets.map(a => (
-                                <option key={a} value={a}>
-                                    {assetType === 'crypto' ? `${a} / USDT` : a.replace('-', '/')}
-                                </option>
-                            ))}
-                        </select>
-
-                        <select
-                            value={selectedTimeframe}
-                            onChange={(e) => setSelectedTimeframe(e.target.value)}
-                            className="bg-black/40 border border-white/10 text-white rounded-lg px-4 py-2.5 focus:border-purple-500 outline-none"
-                        >
-                            {TIMEFRAMES.map(t => <option key={t} value={t}>{t}</option>)}
-                        </select>
-
-                        <button
-                            onClick={fetchAnalysis}
-                            disabled={loading}
-                            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white px-8 py-2.5 rounded-lg font-bold flex items-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_30px_rgba(124,58,237,0.3)]"
-                        >
-                            {loading ? (
-                                <><span className="animate-spin">⚡</span> Analyzing...</>
-                            ) : (
-                                <><Zap className="w-5 h-5" /> Generate Insight</>
-                            )}
-                        </button>
-                    </div>
-                </div>
-
-                {/* Account Size Configuration */}
-                <div className="mt-6 pt-6 border-t border-white/5 flex flex-wrap items-center gap-6">
-                    <div className="flex items-center gap-3">
-                        <div className="bg-blue-500/10 p-2 rounded-lg">
-                            <Wallet className="w-4 h-4 text-blue-400" />
-                        </div>
-                        <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block">Account Size</label>
-                            <div className="flex items-center gap-2">
-                                <span className="text-gray-400 font-bold">$</span>
+                    <div className="flex items-center gap-6 px-4">
+                        {/* Capital Config */}
+                        <div className="flex items-center gap-4 border-l border-white/10 pl-6 h-8">
+                            <span className="hud-label">Capital Input</span>
+                            <div className="flex items-center bg-white/5 border border-white/5 rounded-lg px-3 py-1">
+                                <span className="text-dim text-[10px] mr-2">$</span>
                                 <input
                                     type="number"
                                     value={accountSize}
                                     onChange={(e) => setAccountSize(Math.max(0, parseFloat(e.target.value) || 0))}
-                                    className="bg-transparent border-none text-white font-bold text-lg w-24 focus:outline-none"
+                                    className="bg-transparent text-white font-mono text-xs w-20 focus:outline-none text-right"
                                 />
                             </div>
                         </div>
-                    </div>
 
-                    <div className="h-10 w-px bg-white/5 hidden md:block" />
-
-                    <div className="flex-1">
-                        <p className="text-xs text-gray-500 mb-2">The AI will tailor recommendations based on your capital. <span className="text-purple-400 font-medium italic">Example: A $15 account requires different risk management than a $10,000 account.</span></p>
-                        <div className="flex gap-2">
-                            {[15, 100, 500, 1000, 5000].map(v => (
-                                <button
-                                    key={v}
-                                    onClick={() => setAccountSize(v)}
-                                    className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${accountSize === v
-                                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
-                                        : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
-                                        }`}
-                                >
-                                    ${v}
-                                </button>
-                            ))}
-                        </div>
+                        <button
+                            onClick={fetchAnalysis}
+                            disabled={loading}
+                            className="hud-button-primary disabled:opacity-50"
+                        >
+                            {loading ? <Activity className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                            Execute Analysis
+                        </button>
                     </div>
                 </div>
-            </div>
 
-            {/* Error State */}
-            {error && (
-                <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-xl text-red-200 flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                    {error}
-                </div>
-            )}
-
-            {/* Loading State */}
-            {loading && (
-                <div className="text-center py-20 glass-panel rounded-2xl">
-                    <div className="animate-pulse">
-                        <Zap className="w-16 h-16 mx-auto mb-4 text-purple-500" />
-                        <p className="text-xl text-white mb-2">Analyzing Market Structure...</p>
-                        <p className="text-sm text-gray-500">Fetching candle data and generating AI insights</p>
+                {/* Error / Empty States */}
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-xl text-red-200 flex items-center gap-3">
+                        <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                        {error}
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Empty State */}
-            {!data && !loading && !error && (
-                <div className="text-center py-20 text-gray-500 glass-panel rounded-2xl border-2 border-dashed border-white/5">
-                    <BarChart2 className="w-20 h-20 mx-auto mb-4 opacity-20" />
-                    <p className="text-lg mb-2">Select an asset and timeframe</p>
-                    <p className="text-sm text-gray-600">Click "Generate Insight" to initialize quantum analysis</p>
-                </div>
-            )}
+                {!data && !loading && !error && (
+                    <div className="text-center py-32 glass-panel border-dashed border-white/5 opacity-50">
+                        <Sparkles className="w-16 h-16 mx-auto mb-6 text-dim" />
+                        <h3 className="text-xl font-black text-white uppercase tracking-widest">Architect Idle</h3>
+                        <p className="text-dim text-sm mt-2">Initialize quantum scanning engine to begin market reconstruction.</p>
+                    </div>
+                )}
 
-            {/* Results */}
-            {data && data.analysis && (
-                <div className="space-y-6">
-                    {/* Main Grid */}
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                        {/* TradingView Chart */}
-                        <div className="xl:col-span-2 glass-panel rounded-2xl overflow-hidden">
-                            <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <Activity className="w-5 h-5 text-purple-400" />
-                                    <h3 className="font-bold text-white">Live Chart</h3>
-                                    <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full">• Live</span>
+                {/* Main Workspace Grid */}
+                {data && data.analysis && (
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                        {/* Left Wing: Visual Intel (Cols 1-8) */}
+                        <div className="lg:col-span-8 space-y-6">
+                            {/* Chart HUD */}
+                            <div className="glass-panel overflow-hidden border-white/5">
+                                <div className="p-4 flex items-center justify-between border-b border-white/5 bg-white/[0.02]">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                        <span className="text-[10px] font-black text-white uppercase tracking-[0.2em]">{selectedAsset} LIVE STREAM</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {['BALANCED', 'CHART', 'DATA'].map(l => (
+                                            <button
+                                                key={l}
+                                                onClick={() => setLayout(l)}
+                                                className={`p-1.5 rounded transition-all ${layout === l ? 'bg-white/10 text-white' : 'text-dim hover:text-white'}`}
+                                            >
+                                                {l === 'CHART' ? <BarChart2 className="w-3.5 h-3.5" /> : l === 'DATA' ? <Layers className="w-3.5 h-3.5" /> : <Activity className="w-3.5 h-3.5" />}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                                <span className="text-sm text-gray-400">{getTradingViewSymbol()}</span>
+                                <div className={`transition-all duration-500 ${layout === 'CHART' ? 'h-[600px]' : 'h-[450px]'}`}>
+                                    <iframe
+                                        key={`${selectedAsset}-${selectedTimeframe}`}
+                                        src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${getTradingViewSymbol()}&interval=${selectedTimeframe === '15m' ? '15' : selectedTimeframe === '30m' ? '30' : selectedTimeframe === '1h' ? '60' : '240'}&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=1a1a2e&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&locale=en`}
+                                        style={{ width: '100%', height: '100%', border: 'none' }}
+                                    />
+                                </div>
                             </div>
-                            <div className="h-[450px]">
-                                <iframe
-                                    key={`${selectedAsset}-${selectedTimeframe}`}
-                                    src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${getTradingViewSymbol()}&interval=${selectedTimeframe === '15m' ? '15' : selectedTimeframe === '30m' ? '30' : selectedTimeframe === '1h' ? '60' : '240'}&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=1a1a2e&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&locale=en`}
-                                    style={{ width: '100%', height: '100%', border: 'none' }}
-                                />
+
+                            {/* Intelligence Tabs */}
+                            <div className="glass-panel overflow-hidden border-white/5 bg-black/20">
+                                <div className="flex border-b border-white/5 bg-white/[0.01]">
+                                    {[
+                                        { id: 'STRUCTURE', label: 'Market Structure', icon: Layers },
+                                        { id: 'LOGIC', label: 'Strategy Logic', icon: Sparkles },
+                                        { id: 'OPERATIONS', label: 'Operations', icon: Trophy },
+                                        { id: 'HISTORY', label: 'Signals', icon: History }
+                                    ].map(tab => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => setActiveTab(tab.id)}
+                                            className={`flex items-center gap-2 px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab.id ? 'text-white' : 'text-dim hover:text-white'
+                                                }`}
+                                        >
+                                            <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? 'text-purple-400' : 'text-dim'}`} />
+                                            {tab.label}
+                                            {activeTab === tab.id && (
+                                                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="p-6">
+                                    {activeTab === 'STRUCTURE' && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <span className="text-[10px] text-purple-400 font-black uppercase tracking-widest block mb-2">Primary Pattern</span>
+                                                    <p className="text-xl font-bold text-white font-mono">{data.analysis.pattern}</p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-[10px] text-dim font-black uppercase tracking-widest block mb-1">Architecture Narrative</span>
+                                                    <p className="text-xs text-dim leading-relaxed">{data.analysis.marketStructure}</p>
+                                                </div>
+                                            </div>
+                                            <div className="space-y-6">
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div className="p-4 bg-red-500/5 rounded-xl border border-red-500/10">
+                                                        <span className="hud-label !text-red-400">Resistance Node</span>
+                                                        <div className="hud-value text-lg mt-1">
+                                                            ${data.analysis.keyLevels?.resistance?.[0]?.toFixed(2) || 'N/A'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                                                        <span className="hud-label !text-emerald-400">Support Node</span>
+                                                        <div className="hud-value text-lg mt-1">
+                                                            ${data.analysis.keyLevels?.support?.[0]?.toFixed(2) || 'N/A'}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Quantum Confluence Indicators */}
+                                                <div className="space-y-3 p-4 bg-white/[0.02] rounded-xl border border-white/5">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="hud-label">Quantum Alignment</span>
+                                                        <span className="text-[10px] font-mono text-purple-400">{data.analysis.mtcAlignment || 'Analyzing Layers...'}</span>
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-3">
+                                                        {[1, 2, 3].map(lvl => (
+                                                            <div key={lvl} className="space-y-1.5">
+                                                                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                                                    <motion.div
+                                                                        initial={{ width: 0 }}
+                                                                        animate={{ width: '100%' }}
+                                                                        transition={{ delay: 0.1 * lvl }}
+                                                                        className={`h-full ${data.analysis.signal === 'BUY' ? 'bg-emerald-500' : 'bg-red-500'}`}
+                                                                    />
+                                                                </div>
+                                                                <span className="text-[8px] font-black text-dim uppercase tracking-tighter block text-center">Layer {lvl}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'LOGIC' && (
+                                        <div className="space-y-6">
+                                            <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl relative overflow-hidden">
+                                                <div className="absolute top-0 right-0 p-4 opacity-5">
+                                                    <Info className="w-16 h-16" />
+                                                </div>
+                                                <h4 className="text-[10px] text-dim font-black uppercase tracking-widest mb-4">The Convergence Thesis</h4>
+                                                <p className="text-white text-sm leading-relaxed italic z-10 relative">"{data.analysis.whyEnter}"</p>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <span className="text-[10px] text-red-500 font-black uppercase tracking-widest block mb-3">Alpha Risk Vectors</span>
+                                                    <ul className="space-y-2">
+                                                        {data.analysis.riskFactors?.map((risk, i) => (
+                                                            <li key={i} className="flex items-center gap-3 text-xs text-dim">
+                                                                <div className="w-1 h-1 rounded-full bg-red-500" />
+                                                                {risk}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                                {data.analysis.tailoredSetup && (
+                                                    <div className="p-4 bg-purple-500/5 border border-purple-500/20 rounded-xl">
+                                                        <span className="text-[10px] text-purple-400 font-black uppercase tracking-widest block mb-2">Capital Calibration</span>
+                                                        <p className="text-xs text-white leading-relaxed">{data.analysis.tailoredSetup}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'OPERATIONS' && (
+                                        <div className="space-y-6">
+                                            {/* Operation Performance Strip */}
+                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <span className="hud-label block mb-1">Vault Status</span>
+                                                    <div className="hud-value text-xl">${paperWallet.toLocaleString()}</div>
+                                                </div>
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <span className="hud-label block mb-1">Active Vectors</span>
+                                                    <div className="hud-value text-xl">{paperTrades.filter(t => t.status === 'OPEN').length}</div>
+                                                </div>
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <span className="hud-label block mb-1">Refined PNL</span>
+                                                    <div className="hud-value text-xl text-dim">$0.00</div>
+                                                </div>
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <span className="hud-label block mb-1">Efficiency</span>
+                                                    <div className="hud-value text-xl text-emerald-400">---</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Active Operations Table */}
+                                            <div className="overflow-x-auto rounded-xl border border-white/5">
+                                                <table className="w-full">
+                                                    <thead className="text-[10px] text-dim uppercase font-black bg-white/[0.01]">
+                                                        <tr>
+                                                            <th className="text-left px-6 py-4">Asset Node</th>
+                                                            <th className="text-left py-4">Protocol</th>
+                                                            <th className="text-left py-4">Entry</th>
+                                                            <th className="text-left py-4">TP / SL Bounds</th>
+                                                            <th className="text-right px-6 py-4">Override</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="text-xs">
+                                                        {paperTrades.length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan="5" className="py-12 text-center text-dim italic">
+                                                                    No active virtual operations detected.
+                                                                </td>
+                                                            </tr>
+                                                        ) : (
+                                                            paperTrades.map((trade) => (
+                                                                <tr key={trade.id} className="border-t border-white/5 group hover:bg-white/[0.01] transition-colors">
+                                                                    <td className="px-6 py-4 font-bold text-white uppercase tracking-wider">{trade.symbol}</td>
+                                                                    <td className="py-4">
+                                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black ${trade.type === 'BUY' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                                                                            }`}>
+                                                                            {trade.type}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="py-4 font-mono text-dim">${trade.entry?.toFixed(4)}</td>
+                                                                    <td className="py-4">
+                                                                        <div className="flex flex-col gap-0.5">
+                                                                            <span className="text-[9px] text-emerald-500/60 font-mono">EXTRACT: {trade.tp?.toFixed(4)}</span>
+                                                                            <span className="text-[9px] text-red-500/60 font-mono">ABSORB: {trade.sl?.toFixed(4)}</span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 text-right">
+                                                                        <button
+                                                                            onClick={() => setPaperTrades(paperTrades.filter(t => t.id !== trade.id))}
+                                                                            className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-dim hover:text-red-400"
+                                                                        >
+                                                                            <XCircle className="w-4 h-4" />
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="flex justify-end pt-2">
+                                                <button
+                                                    onClick={() => { if (confirm('Wipe all operations?')) { setPaperTrades([]); setPaperWallet(10000); } }}
+                                                    className="hud-label hover:text-red-400 transition-colors"
+                                                >
+                                                    Emergency Reset Terminal
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'HISTORY' && (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead className="text-[10px] text-dim uppercase font-black">
+                                                    <tr>
+                                                        <th className="text-left pb-4">Asset Node</th>
+                                                        <th className="text-left pb-4">Vector</th>
+                                                        <th className="text-left pb-4">Exec Price</th>
+                                                        <th className="text-right pb-4">Timestamp</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="text-xs">
+                                                    {data.history?.slice(0, 5).map((h, i) => (
+                                                        <tr key={i} className="border-t border-white/5">
+                                                            <td className="py-4 font-bold text-white uppercase tracking-wider">{h.symbol}</td>
+                                                            <td className="py-4">
+                                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black ${h.signal === 'BUY' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                                    {h.signal}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-4 font-mono text-dim">${h.price?.toFixed(2)}</td>
+                                                            <td className="py-4 text-right text-dim">{new Date(h.timestamp).toLocaleTimeString()}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
-                        {/* Signal Card */}
-                        <div className="space-y-4">
-                            <div className={`glass-panel p-6 rounded-2xl border-l-4 ${data.analysis.signal === 'BUY' ? 'border-l-emerald-500' :
-                                data.analysis.signal === 'SELL' ? 'border-l-red-500' : 'border-l-yellow-500'
+                        {/* Right Wing: Command Stack (Cols 9-12) */}
+                        <div className="lg:col-span-4 space-y-6">
+                            {/* Signal Strength Block */}
+                            <div className={`glass-panel p-8 relative overflow-hidden transition-all duration-700 ${data.analysis.signal === 'BUY' ? 'border-emerald-500/30 shadow-[inset_0_0_100px_rgba(16,185,129,0.05)]' :
+                                data.analysis.signal === 'SELL' ? 'border-red-500/30 shadow-[inset_0_0_100px_rgba(239,68,68,0.05)]' :
+                                    'border-yellow-500/30'
                                 }`}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <span className="text-xs text-gray-500 uppercase tracking-wider">Signal</span>
-                                    <span className={`text-xs px-2 py-1 rounded-full ${data.analysis.dataSource === 'live' ? 'bg-green-500/20 text-green-400' :
-                                            data.analysis.dataSource === 'technical' ? 'bg-blue-500/20 text-blue-400' :
-                                                'bg-yellow-500/20 text-yellow-400'
+                                <div className="flex justify-between items-center mb-6">
+                                    <span className="text-[10px] text-dim font-black uppercase tracking-widest">Quantum Verdict</span>
+                                    <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] ${data.analysis.dataSource === 'live' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                                         }`}>
-                                        {data.analysis.dataSource === 'live' ? 'AI Live' :
-                                            data.analysis.dataSource === 'technical' ? 'Technical Engine' :
-                                                'Simulation'}
-                                    </span>
+                                        {data.analysis.dataSource} Engine
+                                    </div>
                                 </div>
 
-                                <h3 className={`text-5xl font-black tracking-tight bg-gradient-to-r ${getSignalColor(data.analysis.signal)} bg-clip-text text-transparent`}>
+                                <h3 className={`text-7xl font-black tracking-tighter mb-4 ${data.analysis.signal === 'BUY' ? 'text-emerald-500 drop-shadow-[0_0_30px_rgba(16,185,129,0.3)]' :
+                                    data.analysis.signal === 'SELL' ? 'text-red-500 drop-shadow-[0_0_30px_rgba(239,68,68,0.3)]' :
+                                        'text-yellow-500'
+                                    }`}>
                                     {data.analysis.signal}
                                 </h3>
 
-                                <div className="mt-4 flex items-center gap-2">
-                                    <span className="text-gray-400 text-sm">Confidence:</span>
-                                    <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                                        <div
-                                            className={`h-full bg-gradient-to-r ${getSignalColor(data.analysis.signal)}`}
-                                            style={{ width: `${data.analysis.confidence}%` }}
+                                <div className="space-y-4 pt-4 border-t border-white/5">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest">Confidence Index</span>
+                                        <span className="text-white font-mono font-bold">{data.analysis.confidence}%</span>
+                                    </div>
+                                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${data.analysis.confidence}%` }}
+                                            className={`h-full ${data.analysis.signal === 'BUY' ? 'bg-emerald-500' : 'bg-red-500'}`}
                                         />
                                     </div>
-                                    <span className="text-white font-bold">{data.analysis.confidence}%</span>
                                 </div>
                             </div>
 
-                            {/* Tailored Recommendation - NEW */}
-                            {data.analysis.tailoredSetup && (
-                                <motion.div
-                                    initial={{ opacity: 0, x: 20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    className="glass-panel p-5 rounded-2xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 border-purple-500/30 shadow-[0_0_20px_rgba(168,85,247,0.1)]"
+                            {/* Execution Coordinates */}
+                            <div className="glass-panel p-6 space-y-4 border-white/5">
+                                <h4 className="text-[10px] text-dim font-black uppercase tracking-[0.2em] mb-4">Execution Coordinates</h4>
+
+                                <div className="space-y-2">
+                                    {[
+                                        { label: 'Market Entry', value: data.analysis.entry, color: 'text-white' },
+                                        { label: 'Risk Barrier (SL)', value: data.analysis.stopLoss, color: 'text-red-400' },
+                                        { label: 'Extraction Node (TP)', value: data.analysis.takeProfit, color: 'text-emerald-400' }
+                                    ].map((coord, i) => (
+                                        <div key={i} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
+                                            <span className="text-[10px] text-dim font-bold uppercase tracking-widest">{coord.label}</span>
+                                            <span className={`font-mono text-sm font-bold ${coord.color}`}>${coord.value?.toFixed(4)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="text-center pt-2">
+                                    <span className="text-[9px] text-dim uppercase tracking-widest">Efficiency Multiplier</span>
+                                    <div className="text-xl font-black text-purple-400 italic font-mono">{data.analysis.riskRewardRatio} R:R</div>
+                                </div>
+                            </div>
+
+                            {/* Integrated Radar */}
+                            <div className="glass-panel p-6 border-white/5 relative overflow-hidden group">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h4 className="text-[10px] text-dim font-black uppercase tracking-[0.2em]">Institutional Zones</h4>
+                                    <Target className="w-4 h-4 text-cyan-500" />
+                                </div>
+                                <div className="relative h-32 flex items-center justify-center">
+                                    <div className="absolute inset-0 border border-white/5 rounded-full flex items-center justify-center">
+                                        <div className="absolute inset-8 border border-white/10 rounded-full" />
+                                        <motion.div
+                                            animate={{ rotate: 360 }}
+                                            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                                            className="absolute w-full h-full rounded-full border-t border-cyan-500/20"
+                                        />
+                                    </div>
+                                    <div className="z-10 w-full px-4 space-y-4">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[9px] text-dim uppercase font-bold">Resistance</span>
+                                            <span className="text-[9px] text-red-400 font-mono">${data.analysis.keyLevels?.resistance?.[0]?.toFixed(2)}</span>
+                                        </div>
+                                        <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                            <div className="h-full bg-red-500/30 w-[85%]" />
+                                        </div>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[9px] text-dim uppercase font-bold">Support</span>
+                                            <span className="text-[9px] text-emerald-400 font-mono">${data.analysis.keyLevels?.support?.[0]?.toFixed(2)}</span>
+                                        </div>
+                                        <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                            <div className="h-full bg-emerald-500/30 w-[92%]" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Execution Trigger */}
+                            <div className="space-y-3">
+                                <button
+                                    onClick={executeVirtualTrade}
+                                    disabled={data.analysis.signal === 'WAIT'}
+                                    className={`w-full py-4 rounded-xl font-black uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-2 transition-all shadow-2xl ${data.analysis.signal === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20' :
+                                        data.analysis.signal === 'SELL' ? 'bg-red-600 hover:bg-red-500 shadow-red-500/20' :
+                                            'bg-dim/20 cursor-not-allowed text-dim'
+                                        }`}
                                 >
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <Zap className="w-5 h-5 text-yellow-400" />
-                                        <h4 className="text-sm font-bold text-white uppercase tracking-wider">Tailored Recommendation</h4>
-                                    </div>
-                                    <p className="text-gray-200 text-[13px] leading-relaxed border-l-2 border-purple-500 pl-4 py-1 italic">
-                                        {data.analysis.tailoredSetup}
-                                    </p>
-                                    <div className="mt-3 text-[10px] text-gray-500 flex items-center gap-1">
-                                        <Wallet className="w-3 h-3" /> Specifically calculated for your ${accountSize} balance
-                                    </div>
-                                </motion.div>
-                            )}
-
-                            {/* Trade Levels */}
-                            <div className="glass-panel p-5 rounded-2xl space-y-3">
-                                <h4 className="text-sm text-gray-400 uppercase tracking-wider mb-4">Trade Setup</h4>
-
-                                <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
-                                    <div className="flex items-center gap-2 text-gray-300">
-                                        <DollarSign className="w-4 h-4 text-blue-400" /> Current
-                                    </div>
-                                    <span className="font-mono text-white text-lg font-bold">
-                                        {data.analysis.currentPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) ?? '---'}
-                                    </span>
+                                    <Zap className="w-4 h-4" />
+                                    Launch Virtual Operation
+                                </button>
+                                <div className="flex items-center justify-between px-2">
+                                    <span className="text-[9px] text-dim uppercase font-bold tracking-widest">Vault Balance</span>
+                                    <span className="text-xs text-white font-mono">${paperWallet.toLocaleString()}</span>
                                 </div>
+                            </div>
 
-                                <div className="flex items-center justify-between p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
-                                    <div className="flex items-center gap-2 text-blue-300">
-                                        <TrendingUp className="w-4 h-4" /> Entry
-                                    </div>
-                                    <span className="font-mono text-white text-lg">
-                                        {data.analysis.entry?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) ?? '---'}
-                                    </span>
+                            <RiskCalculator
+                                entry={data.analysis.entry}
+                                stopLoss={data.analysis.stopLoss}
+                                takeProfit={data.analysis.takeProfit}
+                                symbol={selectedAsset}
+                                assetType={assetType}
+                                currentPrice={data.analysis.currentPrice}
+                                signal={data.analysis.signal}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {/* Loading Sequence */}
+                {loading && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-xl">
+                        <div className="text-center space-y-8 max-w-sm w-full p-8">
+                            <div className="relative w-32 h-32 mx-auto">
+                                <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                    className="absolute inset-0 border-b-2 border-purple-500 rounded-full"
+                                />
+                                <div className="absolute inset-4 bg-purple-500/20 rounded-full flex items-center justify-center">
+                                    <Terminal className="text-purple-400 w-10 h-10 animate-pulse" />
                                 </div>
-
-                                <div className="flex items-center justify-between p-3 bg-red-500/10 rounded-xl border border-red-500/20">
-                                    <div className="flex items-center gap-2 text-red-300">
-                                        <Shield className="w-4 h-4" /> Stop Loss
-                                    </div>
-                                    <span className="font-mono text-white text-lg">
-                                        {data.analysis.stopLoss?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) ?? '---'}
-                                    </span>
-                                </div>
-
-                                <div className="flex items-center justify-between p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                                    <div className="flex items-center gap-2 text-emerald-300">
-                                        <Target className="w-4 h-4" /> Take Profit
-                                    </div>
-                                    <span className="font-mono text-white text-lg">
-                                        {data.analysis.takeProfit?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 }) ?? '---'}
-                                    </span>
-                                </div>
-
-                                {data.analysis.riskRewardRatio && (
-                                    <div className="text-center pt-2">
-                                        <span className="text-xs text-gray-500">Risk/Reward</span>
-                                        <div className="text-lg font-bold text-purple-400">{data.analysis.riskRewardRatio}</div>
-                                    </div>
-                                )}
+                            </div>
+                            <div className="space-y-2">
+                                <h2 className="text-xl font-black text-white uppercase tracking-[0.3em]">RECONSTRUCTING</h2>
+                                <p className="text-dim font-mono text-[10px] uppercase tracking-widest h-4">
+                                    {loadingSteps[loadingStep]}
+                                </p>
+                            </div>
+                            <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                                <motion.div
+                                    className="h-full bg-purple-500"
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${((loadingStep + 1) / loadingSteps.length) * 100}%` }}
+                                />
                             </div>
                         </div>
                     </div>
-
-                    {/* Analysis Details */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Pattern & Structure */}
-                        <div className="glass-panel p-6 rounded-2xl">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                <Layers className="w-5 h-5 text-purple-400" />
-                                Market Structure
-                            </h3>
-
-                            <div className="space-y-4">
-                                <div>
-                                    <span className="text-xs text-purple-400 uppercase tracking-wider">Pattern Detected</span>
-                                    <div className="mt-1 px-3 py-2 bg-purple-500/10 border border-purple-500/30 rounded-lg text-white font-medium">
-                                        {data.analysis.pattern}
-                                    </div>
-                                </div>
-
-                                {data.analysis.patternDescription && (
-                                    <div>
-                                        <span className="text-xs text-gray-500 uppercase tracking-wider">Pattern Significance</span>
-                                        <p className="mt-1 text-gray-300 text-sm leading-relaxed">
-                                            {data.analysis.patternDescription}
-                                        </p>
-                                    </div>
-                                )}
-
-                                <div>
-                                    <span className="text-xs text-gray-500 uppercase tracking-wider">Structure Analysis</span>
-                                    <p className="mt-1 text-gray-300 text-sm leading-relaxed">
-                                        {data.analysis.marketStructure}
-                                    </p>
-                                </div>
-
-                                {data.analysis.keyLevels && (
-                                    <div className="grid grid-cols-2 gap-3 pt-2">
-                                        <div className="p-3 bg-red-500/5 rounded-lg border border-red-500/20">
-                                            <span className="text-xs text-red-400">Resistance</span>
-                                            <div className="font-mono text-white text-sm mt-1">
-                                                {data.analysis.keyLevels.resistance?.map((r, i) => (
-                                                    <div key={i}>{r?.toFixed(4)}</div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/20">
-                                            <span className="text-xs text-emerald-400">Support</span>
-                                            <div className="font-mono text-white text-sm mt-1">
-                                                {data.analysis.keyLevels.support?.map((s, i) => (
-                                                    <div key={i}>{s?.toFixed(4)}</div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Why Enter & Risks */}
-                        <div className="glass-panel p-6 rounded-2xl">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                {data.analysis.signal === 'BUY' ? (
-                                    <TrendingUp className="w-5 h-5 text-emerald-400" />
-                                ) : data.analysis.signal === 'SELL' ? (
-                                    <TrendingDown className="w-5 h-5 text-red-400" />
-                                ) : (
-                                    <Clock className="w-5 h-5 text-yellow-400" />
-                                )}
-                                {data.analysis.signal === 'BUY' ? 'Why Long?' : data.analysis.signal === 'SELL' ? 'Why Short?' : 'Why Wait?'}
-                            </h3>
-
-                            <div className="space-y-4">
-                                <div className={`p-4 rounded-xl border ${getSignalBg(data.analysis.signal, data.analysis.dataSource)}`}>
-                                    <p className="text-gray-200 text-sm leading-relaxed">
-                                        {data.analysis.whyEnter}
-                                    </p>
-                                </div>
-
-                                {data.analysis.riskFactors && data.analysis.riskFactors.length > 0 && (
-                                    <div>
-                                        <span className="text-xs text-red-400 uppercase tracking-wider flex items-center gap-1">
-                                            <AlertCircle className="w-3 h-3" /> Risk Factors
-                                        </span>
-                                        <ul className="mt-2 space-y-2">
-                                            {data.analysis.riskFactors.map((risk, i) => (
-                                                <li key={i} className="flex items-start gap-2 text-sm text-gray-400">
-                                                    <XCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                                                    {risk}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                )}
-
-                                {data.analysis.technicalNotes && (
-                                    <div>
-                                        <span className="text-xs text-gray-500 uppercase tracking-wider">Technical Notes</span>
-                                        <p className="mt-1 text-gray-400 text-sm">
-                                            {data.analysis.technicalNotes}
-                                        </p>
-                                    </div>
-                                )}
-
-                                <div className="pt-4 border-t border-white/10">
-                                    <p className="text-purple-300 italic text-sm">
-                                        "{data.analysis.reasoning}"
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Risk Calculator */}
-                    <RiskCalculator
-                        entry={data.analysis.entry}
-                        stopLoss={data.analysis.stopLoss}
-                        takeProfit={data.analysis.takeProfit}
-                        symbol={selectedAsset}
-                        assetType={assetType}
-                        currentPrice={data.analysis.currentPrice}
-                        signal={data.analysis.signal}
-                    />
-
-                    {/* Stats Bar */}
-                    <div className="glass-panel p-4 rounded-xl">
-                        <div className="flex flex-wrap items-center justify-center gap-8 text-center">
-                            <div>
-                                <div className="text-2xl font-bold text-white">{data.symbol}</div>
-                                <div className="text-xs text-gray-500">{data.assetType?.toUpperCase()}</div>
-                            </div>
-                            <div className="w-px h-8 bg-white/10 hidden sm:block" />
-                            <div>
-                                <div className="text-2xl font-bold text-white">{data.timeframe}</div>
-                                <div className="text-xs text-gray-500">Timeframe</div>
-                            </div>
-                            <div className="w-px h-8 bg-white/10 hidden sm:block" />
-                            <div>
-                                <div className="text-2xl font-bold text-white">{data.candles?.length}</div>
-                                <div className="text-xs text-gray-500">Candles Analyzed</div>
-                            </div>
-                            <div className="w-px h-8 bg-white/10 hidden sm:block" />
-                            <div>
-                                <div className="text-2xl font-bold text-purple-400">
-                                    {new Date(data.analysis.timestamp).toLocaleTimeString()}
-                                </div>
-                                <div className="text-xs text-gray-500">Generated At</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     );
 };

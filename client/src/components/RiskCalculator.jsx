@@ -228,7 +228,11 @@ const RiskCalculator = ({
             balanceAfterLoss: balanceAfterLoss.toFixed(2),
             balanceAfterWin: balanceAfterWin.toFixed(2),
             isCrypto: assetType === 'crypto',
-            requiredMargin: (lotSize * entry) / leverage
+            requiredMargin: (lotSize * entry) / leverage,
+            liquidationPrice: signal === 'BUY'
+                ? entry * (1 - (1 / leverage))
+                : entry * (1 + (1 / leverage)),
+            liquidationDistance: (1 / leverage) * 100
         };
     }, [capital, riskPercent, entry, stopLoss, takeProfit, symbol, assetType, currentPrice, signal, isMarginMode, leverage]);
 
@@ -322,8 +326,8 @@ const RiskCalculator = ({
                             <button
                                 onClick={() => setIsMarginMode(!isMarginMode)}
                                 className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${isMarginMode
-                                        ? 'bg-blue-500/20 border-blue-500 text-blue-300'
-                                        : 'bg-white/5 border-white/10 text-gray-500'
+                                    ? 'bg-blue-500/20 border-blue-500 text-blue-300'
+                                    : 'bg-white/5 border-white/10 text-gray-500'
                                     }`}
                             >
                                 {isMarginMode ? 'Margin Based' : 'Distance Based'}
@@ -491,7 +495,45 @@ const RiskCalculator = ({
                             </div>
                         </div>
 
-                        {/* Trade Details Summary */}
+                        {/* Liquidation Guard - NEW */}
+                        {calculations.isCrypto && isMarginMode && (
+                            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-5 overflow-hidden relative">
+                                <div className="absolute top-0 right-0 p-4 opacity-10">
+                                    <AlertTriangle className="w-12 h-12 text-orange-500" />
+                                </div>
+                                <div className="relative">
+                                    <div className="flex items-center gap-2 text-orange-400 mb-3">
+                                        <Shield className="w-5 h-5 text-orange-500" />
+                                        <span className="font-bold uppercase tracking-widest text-[11px]">Liquidation Guard Active</span>
+                                    </div>
+                                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                                        <div>
+                                            <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tighter mb-1">Theoretical Liquidation</div>
+                                            <div className="text-2xl font-mono text-white font-black">${calculations.liquidationPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                        </div>
+                                        <div className="flex-1 max-w-[200px]">
+                                            <div className="flex justify-between text-[10px] mb-1">
+                                                <span className="text-gray-500">Distance:</span>
+                                                <span className={`${calculations.liquidationDistance < (calculations.riskPercent * 2) ? 'text-red-400' : 'text-orange-400'} font-bold`}>
+                                                    {calculations.liquidationDistance.toFixed(2)}%
+                                                </span>
+                                            </div>
+                                            <div className="h-1.5 bg-black/40 rounded-full overflow-hidden">
+                                                <div
+                                                    className={`h-full rounded-full ${calculations.liquidationDistance < 5 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-orange-500'}`}
+                                                    style={{ width: `${Math.min(100, calculations.liquidationDistance * 2)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {Math.abs(entry - stopLoss) > Math.abs(entry - calculations.liquidationPrice) && (
+                                        <div className="mt-3 text-[10px] text-red-400 font-bold flex items-center gap-1 animate-pulse">
+                                            <AlertTriangle className="w-3 h-3" /> WARNING: Stop Loss is past Liquidation Price!
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                         <div className="bg-white/5 border border-white/10 rounded-xl p-4">
                             <div className="grid grid-cols-4 gap-4 text-center">
                                 <div>
