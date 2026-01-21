@@ -11,7 +11,14 @@ import AIInsights from './components/AIInsights';
 import { useSocket } from './hooks/useSocket';
 
 function App() {
-    const [activeTab, setActiveTab] = useState('news');
+    const [activeTab, setActiveTab] = useState(() => {
+        return localStorage.getItem('traders_hub_active_tab') || 'news';
+    });
+
+    useEffect(() => {
+        localStorage.setItem('traders_hub_active_tab', activeTab);
+    }, [activeTab]);
+
     const { news, prices, connected, sendChatMessage, chatMessages } = useSocket();
 
     return (

@@ -6,6 +6,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import { searchDocuments, getStats } from './vectorStore.js';
+import { analyzeTechnicals } from './technicalAnalysis.js';
 
 dotenv.config();
 
@@ -149,28 +150,59 @@ function generateRuleBasedAnalysis(title, description) {
 
 /**
  * Analyze market structure and generate trade setup (ENHANCED)
- * @param {string} symbol - Asset symbol
- * @param {string} timeframe - Chart timeframe
- * @param {Array} candles - Array of OHLCV data
+ * @param {Object} candlesData - Object containing primary, secondary, tertiary candles and intervals
  * @param {string} assetType - 'crypto' or 'forex'
+ * @param {number} accountSize - User's trading capital
+ * @param {Array} news - Latest news headlines
  */
-export async function analyzeMarketStructure(symbol, timeframe, candles, assetType = 'crypto') {
-    // Calculate key metrics from candles
+export async function analyzeMarketStructure(symbol, currentInterval, candlesData, assetType = 'crypto', accountSize = 500, news = []) {
+    // Handle both legacy (Array) and MTC (Object) formats
+    const isMTC = candlesData && candlesData.primary;
+    const candles = isMTC ? candlesData.primary : candlesData;
+    const secondary = isMTC ? candlesData.secondary : [];
+    const tertiary = isMTC ? candlesData.tertiary : [];
+    const mtcIntervals = isMTC ? candlesData.intervals : [currentInterval];
+
+    // Calculate key metrics from primary candles with guardrails
+    if (!candles || candles.length === 0) {
+        console.log('⚠️ No candles provided for analysis');
+        return analyzeTechnicals(symbol, candles, assetType, accountSize);
+    }
+
     const recentCandles = candles.slice(-30);
     const currentPrice = candles[candles.length - 1].close;
     const highestHigh = Math.max(...recentCandles.map(c => c.high));
     const lowestLow = Math.min(...recentCandles.map(c => c.low));
-    const avgVolume = recentCandles.reduce((sum, c) => sum + c.volume, 0) / recentCandles.length;
+
+    let avgVolume = 0;
+    if (recentCandles.length > 0) {
+        const sumVol = recentCandles.reduce((sum, c) => sum + (c.volume || 0), 0);
+        avgVolume = sumVol / recentCandles.length;
+    }
+
     const lastCandle = candles[candles.length - 1];
     const prevCandle = candles[candles.length - 2];
 
-    // Format candles for prompt
-    const candleData = recentCandles.slice(-20).map(c =>
-        `[${new Date(c.time).toISOString().substr(11, 5)}] O:${c.open.toFixed(4)} H:${c.high.toFixed(4)} L:${c.low.toFixed(4)} C:${c.close.toFixed(4)} V:${c.volume.toFixed(0)}`
-    ).join('\n');
+    console.log(`🔍 [${assetType.toUpperCase()}] Analyzing ${symbol} | Price: ${currentPrice} | MTC Enabled: ${isMTC}`);
+
+    // Helper: Format candles for prompt
+    const formatCandles = (data) => {
+        if (!data || data.length === 0) return "No data available";
+        return data.slice(-15).map(c =>
+            `[${new Date(c.time).toISOString().substr(11, 5)}] O:${c.open.toFixed(4)} H:${c.high.toFixed(4)} L:${c.low.toFixed(4)} C:${c.close.toFixed(4)}`
+        ).join('\n');
+    };
+
+    const primaryData = formatCandles(candles);
+    const secondaryData = formatCandles(secondary);
+    const tertiaryData = formatCandles(tertiary);
+
+    const newsContext = news.length > 0
+        ? news.map((n, i) => `${i + 1}. ${n.title}`).join('\n')
+        : "No recent news available.";
 
     if (!model) {
-        return generateMockTradeSetup(symbol, currentPrice, assetType);
+        return analyzeTechnicals(symbol, candles, assetType, accountSize);
     }
 
     try {
@@ -196,45 +228,55 @@ export async function analyzeMarketStructure(symbol, timeframe, candles, assetTy
             // RAG is optional - continue without it if it fails
             console.log('⚠️  RAG retrieval skipped:', ragError.message);
         }
-        const prompt = `You are a Master Trader AI with encyclopedic knowledge of "The Candlestick Trading Bible" by Munehisa Homma and advanced Price Action analysis.
-${knowledgeContext}
+        const prompt = `You are a Master Trader AI with encyclopedic knowledge of "The Candlestick Trading Bible" and Price Action.
+
+Your goal is MULTI-TIMEFRAME CONFLUENCE (MTC) analysis. Look for alignments across different time intervals.
+
 ASSET: ${symbol} (${assetType.toUpperCase()})
-TIMEFRAME: ${timeframe}
+USER ACCOUNT SIZE: $${accountSize}
+
+=== PRIMARY: ${mtcIntervals[0]} ===
 CURRENT PRICE: ${currentPrice.toFixed(4)}
-RANGE: High ${highestHigh.toFixed(4)} | Low ${lowestLow.toFixed(4)}
-AVG VOLUME: ${avgVolume.toFixed(0)}
+${primaryData}
 
-RECENT OHLCV DATA:
-${candleData}
+=== SECONDARY: ${mtcIntervals[1] || 'N/A'} ===
+${secondaryData}
 
-${knowledgeContext ? 'Use the trading knowledge provided above to inform your analysis. Reference specific patterns, chapters, or concepts from the documents when applicable.' : ''}
+=== TERTIARY: ${mtcIntervals[2] || 'N/A'} ===
+${tertiaryData}
 
-ANALYSIS REQUIREMENTS:
-1. Identify Market Structure: Is price making Higher Highs/Higher Lows (uptrend), Lower Highs/Lower Lows (downtrend), or ranging?
-2. Identify Candlestick Patterns from "The Candlestick Trading Bible": Engulfing, Pin Bars (Hammer/Shooting Star), Morning/Evening Star, Doji, etc.
-3. Determine Support & Resistance levels from the data.
-4. Calculate Risk/Reward ratio.
+=== RECENT MARKET NEWS ===
+${newsContext}
 
-Return a STRICT JSON response (NO markdown, NO backticks) with this EXACT structure:
+${knowledgeContext}
+
+TASKS:
+1. Identify Market Structure across all timeframes. High timeframe (HTF) trend is DOMINANT.
+2. Look for "Quantum Alignment": If all timeframes point in the same direction, confidence is HIGH.
+3. Evaluate News Impact: Does the news support or conflict with technicals?
+4. Provide a TAILORED TRADE SETUP for $${accountSize}.
+5. Categorize the signal: BUY, SELL, or WAIT.
+
+Return STRICT JSON:
 {
-  "signal": "BUY" | "SELL" | "WAIT",
-  "confidence": 1-100,
-  "currentPrice": ${currentPrice},
-  "pattern": "Specific pattern name (e.g., Bullish Engulfing at Key Support)",
-  "patternDescription": "Detailed explanation of the pattern found and its significance",
-  "marketStructure": "Detailed description of trend, key levels, and market phase",
-  "entry": number (precise entry price based on the pattern),
-  "stopLoss": number (placed below/above key structure),
-  "takeProfit": number (based on next resistance/support or R:R ratio),
-  "riskRewardRatio": "e.g., 1:2.5",
-  "keyLevels": {
-    "resistance": [number, number],
-    "support": [number, number]
-  },
-  "whyEnter": "Detailed explanation of WHY this is a good entry. Reference specific candles, patterns${knowledgeContext ? ', knowledge from uploaded documents,' : ''} from The Candlestick Trading Bible, and market structure.",
-  "riskFactors": ["List of 2-3 risk factors to watch"],
-  "technicalNotes": "Any additional technical observations (divergences, volume analysis, etc.)",
-  "reasoning": "One-liner summary using anti-gravity/levitation metaphors"
+  "signal": "BUY|SELL|WAIT",
+  "confidence": 0-100,
+  "mtcAlignment": "Description of alignment (e.g., '15m/1h/4h Bullish Alignment')",
+  "newsSentiment": "Bullish|Bearish|Neutral",
+  "newsImpact": "Short explanation of how news affects this setup",
+  "currentPrice": number,
+  "pattern": "Primary candlestick pattern name",
+  "patternDescription": "Detailed analysis of structure and alignment",
+  "marketStructure": "Description of trend/range across timeframes",
+  "entry": number|null,
+  "stopLoss": number|null,
+  "takeProfit": number|null,
+  "riskRewardRatio": "X:Y",
+  "keyLevels": { "resistance": [], "support": [] },
+  "whyEnter": "Reasoning based on Confluence, Candles, and News",
+  "riskFactors": ["List of risk factors"],
+  "tailoredSetup": "Specific instruction for $${accountSize}",
+  "reasoning": "Anti-gravity/levitation metaphor summary"
 }
 
 RULES:
@@ -261,8 +303,9 @@ RULES:
         };
 
     } catch (error) {
-        console.error('Gemini Trade Analysis Error:', error.message);
-        return generateMockTradeSetup(symbol, currentPrice, assetType);
+        console.error(`❌ Gemini Error for ${symbol}:`, error.message);
+        console.log('🔄 Falling back to technical analysis engine...');
+        return analyzeTechnicals(symbol, candles, assetType, accountSize);
     }
 }
 

@@ -12,6 +12,7 @@ import cron from 'node-cron';
 
 import { fetchNews, fetchCryptoPrices, fetchForexPrices, fetchCommodityPrices, fetchCandles, fetchForexCandles } from './services/dataFetcher.js';
 import { analyzeNewsImpact, analyzeMarketStructure } from './services/aiAnalyst.js';
+import { logSignal, getSignalHistory } from './services/signalTracker.js';
 import { initializeVectorStore } from './services/vectorStore.js';
 import knowledgeRoutes from './routes/knowledgeRoutes.js';
 
@@ -74,27 +75,65 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
     try {
         const { symbol, timeframe } = req.params;
         const assetType = req.query.type || 'crypto';
+        const accountSize = req.query.accountSize || 500;
 
-        console.log(`🔍 Analyzing ${symbol} (${assetType}) on ${timeframe}...`);
+        console.log(`🔍 Analyzing ${symbol} (${assetType}) on ${timeframe} for $${accountSize} account...`);
 
-        let candles;
+        let candles, secondaryCandles, tertiaryCandles;
         let cleanSymbol = symbol;
 
+        // Define MTC Timeframes
+        const intervals = {
+            '15m': ['15m', '1h', '4h'],
+            '30m': ['30m', '1h', '4h'],
+            '1h': ['1h', '4h', '1d'],
+            '4h': ['4h', '1d', '1w'],
+            '1d': ['1d', '1w', '1M']
+        };
+        const activeIntervals = intervals[timeframe] || [timeframe, '1h', '4h'];
+
         if (assetType === 'forex') {
-            // For forex, expect format like EUR-USD or EURUSD
             cleanSymbol = symbol.replace('-', '/').toUpperCase();
             if (!cleanSymbol.includes('/') && cleanSymbol.length === 6) {
-                // Convert EURUSD to EUR/USD
                 cleanSymbol = cleanSymbol.slice(0, 3) + '/' + cleanSymbol.slice(3);
             }
-            candles = await fetchForexCandles(cleanSymbol, timeframe);
+            [candles, secondaryCandles, tertiaryCandles] = await Promise.all([
+                fetchForexCandles(cleanSymbol, activeIntervals[0]),
+                fetchForexCandles(cleanSymbol, activeIntervals[1]),
+                fetchForexCandles(cleanSymbol, activeIntervals[2])
+            ]);
         } else {
             cleanSymbol = symbol.toUpperCase();
-            candles = await fetchCandles(cleanSymbol, timeframe);
+            [candles, secondaryCandles, tertiaryCandles] = await Promise.all([
+                fetchCandles(cleanSymbol, activeIntervals[0]),
+                fetchCandles(cleanSymbol, activeIntervals[1]),
+                fetchCandles(cleanSymbol, activeIntervals[2])
+            ]);
         }
 
-        // Perform AI Analysis with asset type context
-        const analysis = await analyzeMarketStructure(cleanSymbol, timeframe, candles, assetType);
+        // Fetch latest news context
+        const news = await fetchNews();
+        const relevantNews = news.slice(0, 5); // Take top 5 headlines
+
+        // Perform AI Analysis with Multi-Timeframe and News context
+        const analysis = await analyzeMarketStructure(
+            cleanSymbol,
+            timeframe,
+            {
+                primary: candles,
+                secondary: secondaryCandles,
+                tertiary: tertiaryCandles,
+                intervals: activeIntervals
+            },
+            assetType,
+            accountSize,
+            relevantNews
+        );
+
+        // PERSISTENCE: Log this signal for the "Last 5 Signals" feature
+        if (analysis && analysis.signal !== 'WAIT') {
+            logSignal(analysis, cleanSymbol, timeframe);
+        }
 
         res.json({
             success: true,
@@ -103,7 +142,8 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
                 assetType,
                 timeframe,
                 candles,
-                analysis
+                analysis,
+                history: getSignalHistory().slice(0, 10) // Send recent history too
             }
         });
     } catch (error) {
