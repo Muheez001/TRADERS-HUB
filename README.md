@@ -65,11 +65,17 @@ Recently upgraded with cutting-edge features to redefine your trading experience
     ```
 
 2.  **Environment Setup**
-    Create a `.env` in the `server` folder:
+    Get your free API keys and add them to a `.env` file in the `server` folder:
+    *   **Gemini AI:** [Get API Key](https://aistudio.google.com/apikey)
+    *   **Pinecone:** [Get API Key](https://www.pinecone.io/)
+    *   **NewsData:** [Get API Key](https://newsdata.io/)
+    *   **Twelve Data (Optional):** [Get API Key](https://twelvedata.com/)
+
     ```env
     GEMINI_API_KEY=your_key
     PINECONE_API_KEY=your_key
     NEWSDATA_API_KEY=your_key
+    TWELVE_DATA_API_KEY=your_key
     ```
 
 3.  **Ignition**
