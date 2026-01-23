@@ -1,7 +1,10 @@
 /**
  * Technical Analysis Service
  * Provides indicators-based trading signals when Gemini is unavailable.
+ * Enhanced with candlestick pattern detection from "The Candlestick Trading Bible"
  */
+
+import { detectPatterns } from './candlestickPatterns.js';
 
 /**
  * Calculate Exponential Moving Average (EMA)
@@ -58,10 +61,11 @@ function calculateATR(data, period = 14) {
 
 /**
  * Generate technical signal and setup
+ * Now enhanced with candlestick pattern detection
  */
 export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     if (!candles || candles.length < 2) {
-        return { signal: 'WAIT', reasoning: 'Insufficient data for technical analysis.' };
+        return { signal: 'WAIT', reasoning: 'Insufficient data for technical analysis.', dataSource: 'technical' };
     }
 
     const last = candles[candles.length - 1];
@@ -73,6 +77,12 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     const rsi = calculateRSI(candles, 14);
     const atr = calculateATR(candles, 14);
 
+    // === CANDLESTICK PATTERN DETECTION ===
+    const patternResult = detectPatterns(candles.slice(-10)); // Last 10 candles for pattern detection
+    const detectedPattern = patternResult.pattern;
+    const patternSignal = patternResult.signal;
+    const allPatterns = patternResult.patterns;
+
     // Logic: EMA Cross
     const crossedUp = last.close > ema9 && last.close > ema21 && (prev.close <= ema9 || prev.close <= ema21);
     const crossedDown = last.close < ema9 && last.close < ema21 && (prev.close >= ema9 || prev.close >= ema21);
@@ -80,7 +90,18 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     let signal = 'WAIT';
     let confidence = 50;
 
-    if (crossedUp && rsi < 70) {
+    // Candlestick patterns take priority if detected
+    if (patternSignal !== 'WAIT' && allPatterns.length > 0) {
+        signal = patternSignal;
+        // Higher confidence for stronger patterns
+        const strongestPattern = allPatterns[0];
+        confidence = 55 + (strongestPattern.strength * 10); // 65-95% based on pattern strength
+
+        // Boost confidence if EMA confirms the pattern
+        if ((signal === 'BUY' && crossedUp) || (signal === 'SELL' && crossedDown)) {
+            confidence = Math.min(95, confidence + 10);
+        }
+    } else if (crossedUp && rsi < 70) {
         signal = 'BUY';
         confidence = rsi < 30 ? 85 : 65;
     } else if (crossedDown && rsi > 30) {
@@ -96,6 +117,14 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     const stopLoss = signal === 'BUY' ? entry - (atr * slMultiplier) : entry + (atr * slMultiplier);
     const takeProfit = signal === 'BUY' ? entry + (atr * tpMultiplier) : entry - (atr * tpMultiplier);
 
+    // Build pattern description
+    let patternDescription = '';
+    if (allPatterns.length > 0) {
+        const patternNames = allPatterns.map(p => p.name).join(', ');
+        patternDescription = `Candlestick patterns detected: ${patternNames}. `;
+    }
+    patternDescription += `RSI: ${rsi.toFixed(1)} | EMA9: ${ema9.toFixed(4)} | EMA21: ${ema21.toFixed(4)}`;
+
     // Tailored setup logic
     let tailoredSetup = "";
     if (signal !== 'WAIT') {
@@ -104,23 +133,44 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
 
         if (assetType === 'forex') {
             const lots = (riskPerTrade / (priceDistance * 100000)).toFixed(2);
-            tailoredSetup = `[TECHNICAL FALLBACK] For your $${accountSize} balance, we suggest ${Math.max(0.01, lots)} lots. EMA crossover confirmed with RSI at ${rsi.toFixed(0)}. Keep risk at $${riskPerTrade.toFixed(2)}.`;
+            tailoredSetup = `[LOCAL ENGINE] For your $${accountSize} balance, ${Math.max(0.01, lots)} lots recommended. ${detectedPattern} pattern detected with RSI at ${rsi.toFixed(0)}.`;
         } else {
             const units = (riskPerTrade / (priceDistance || 1)).toFixed(4);
-            tailoredSetup = `[TECHNICAL FALLBACK] With $${accountSize}, use ~${units} units. RSI is ${rsi < 40 ? 'oversold' : rsi > 60 ? 'overbought' : 'neutral'} at ${rsi.toFixed(0)}. Gravity test successful via EMA crossover.`;
+            tailoredSetup = `[LOCAL ENGINE] With $${accountSize}, use ~${units} units. ${detectedPattern} detected. RSI is ${rsi < 40 ? 'oversold' : rsi > 60 ? 'overbought' : 'neutral'} at ${rsi.toFixed(0)}.`;
         }
+    }
+
+    // Generate reasoning based on pattern
+    let reasoning = '';
+    if (signal === 'BUY') {
+        reasoning = allPatterns.length > 0
+            ? `${detectedPattern} detected - Anti-gravity lift initiated at support zone.`
+            : 'Anti-gravity lift confirmed by technical thrusters.';
+    } else if (signal === 'SELL') {
+        reasoning = allPatterns.length > 0
+            ? `${detectedPattern} detected - Gravity reclaiming control at resistance.`
+            : 'Gravity winning the battle, structural collapse detected.';
+    } else {
+        reasoning = 'Quantum entanglement detected, waiting for breakthrough.';
     }
 
     return {
         signal,
         confidence,
-        mtcAlignment: 'Indicator Crossover (Single Timeframe Fallback)',
+        mtcAlignment: allPatterns.length > 0
+            ? `Pattern-Based Analysis (${allPatterns.length} patterns detected)`
+            : 'Indicator Crossover (Single Timeframe Fallback)',
         newsSentiment: 'Neutral',
-        newsImpact: 'News context unavailable in technical fallback mode.',
+        newsImpact: 'News context unavailable in local engine mode.',
         currentPrice: last.close,
-        pattern: signal === 'BUY' ? 'Golden Cross / Bullish Momentum' : signal === 'SELL' ? 'Death Cross / Bearish Momentum' : 'Consolidation',
-        patternDescription: `Technical analysis based on EMA crossover and RSI momentum. Current RSI: ${rsi.toFixed(1)}.`,
-        marketStructure: signal === 'BUY' ? 'Ascending structure with positive momentum.' : signal === 'SELL' ? 'Descending structure with negative momentum.' : 'Price hovering in a tight range.',
+        pattern: detectedPattern,
+        patternDescription,
+        detectedPatterns: allPatterns, // Include all detected patterns for UI
+        marketStructure: signal === 'BUY'
+            ? 'Ascending structure with positive momentum.'
+            : signal === 'SELL'
+                ? 'Descending structure with negative momentum.'
+                : 'Price hovering in a tight range.',
         entry: signal === 'WAIT' ? null : entry,
         stopLoss: signal === 'WAIT' ? null : stopLoss,
         takeProfit: signal === 'WAIT' ? null : takeProfit,
@@ -129,16 +179,19 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
             resistance: [entry + atr, entry + (atr * 2)],
             support: [entry - atr, entry - (atr * 2)]
         },
-        whyEnter: `EMA indicators show ${signal === 'BUY' ? 'bullish' : 'bearish'} trajectory. RSI is at ${rsi.toFixed(1)}, showing ${signal === 'BUY' ? 'strength' : 'weakness'}. ATR volatility is ${atr.toFixed(4)}.`,
+        whyEnter: allPatterns.length > 0
+            ? `${detectedPattern} pattern identified. EMA${crossedUp || crossedDown ? ' crossover confirms direction.' : ' alignment neutral.'} RSI at ${rsi.toFixed(1)}.`
+            : `EMA indicators show ${signal === 'BUY' ? 'bullish' : 'bearish'} trajectory. RSI is at ${rsi.toFixed(1)}, showing ${signal === 'BUY' ? 'strength' : 'weakness'}. ATR volatility is ${atr.toFixed(4)}.`,
         riskFactors: [
-            'Technical indicators only (No AI context)',
-            'Potential lag in crossover signal',
+            'Local engine analysis (No Gemini AI)',
+            allPatterns.length > 0 ? 'Pattern-based signal' : 'Indicator-based signal',
             'Watch for news-driven volatility'
         ],
-        technicalNotes: `RSI: ${rsi.toFixed(1)} | ATR: ${atr.toFixed(4)}`,
+        technicalNotes: `RSI: ${rsi.toFixed(1)} | ATR: ${atr.toFixed(4)} | Patterns: ${allPatterns.length}`,
         tailoredSetup,
-        reasoning: signal === 'BUY' ? 'Anti-gravity lift confirmed by technical thrusters.' : signal === 'SELL' ? 'Gravity winning the battle, structural collapse detected.' : 'Quantum entanglement detected, waiting for breakthrough.',
+        reasoning,
         timestamp: Date.now(),
         dataSource: 'technical'
     };
 }
+

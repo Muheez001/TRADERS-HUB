@@ -4,7 +4,7 @@ import { initializeVectorStore, searchDocuments, getStats } from './services/vec
 
 dotenv.config();
 
-// Small test with 3 key candlestick patterns
+// Expanded knowledge base with 10 key candlestick patterns from "The Candlestick Trading Bible"
 const testKnowledge = [
     {
         title: "Bullish Engulfing Pattern",
@@ -19,6 +19,41 @@ const testKnowledge = [
     {
         title: "Doji Candle - Indecision",
         content: `A doji candle has very small or no body (opening and closing prices nearly equal) with long wicks. It signals market indecision. When appearing after a strong trend, it often indicates a potential reversal. At support/resistance, it's a powerful signal. Traders wait for confirmation with the next candle before entering.`,
+        category: "candlestick_patterns"
+    },
+    {
+        title: "Hammer / Bullish Pin Bar",
+        content: `The hammer is a bullish reversal pattern that forms at the bottom of a downtrend. It has a small body at the top with a long lower wick (at least 2x the body size) and minimal upper wick. The long lower wick shows buyers rejected lower prices. Entry: Above the hammer's high. Stop Loss: Below the hammer's low. Works best at key support levels. Confirmation with next bullish candle increases reliability.`,
+        category: "candlestick_patterns"
+    },
+    {
+        title: "Shooting Star / Bearish Pin Bar",
+        content: `The shooting star is a bearish reversal pattern at the top of an uptrend. It has a small body at the bottom with a long upper wick (at least 2x the body size) and minimal lower wick. The long upper wick shows sellers rejected higher prices. Entry: Below the shooting star's low. Stop Loss: Above the shooting star's high. Most effective at resistance levels.`,
+        category: "candlestick_patterns"
+    },
+    {
+        title: "Morning Star Pattern",
+        content: `The morning star is a powerful three-candle bullish reversal pattern. First candle: large bearish candle continuing the downtrend. Second candle: small body (can be doji) showing indecision, often gaps down. Third candle: large bullish candle that closes into the first candle's body. Entry: Above the third candle's high. Stop Loss: Below the pattern's low. This pattern signals the end of selling pressure and beginning of buying momentum.`,
+        category: "candlestick_patterns"
+    },
+    {
+        title: "Evening Star Pattern",
+        content: `The evening star is a three-candle bearish reversal pattern at market tops. First candle: large bullish candle continuing the uptrend. Second candle: small body showing indecision at the peak. Third candle: large bearish candle closing into the first candle's body. Entry: Below the third candle's low. Stop Loss: Above the pattern's high. This signals exhaustion of buying pressure and incoming selling.`,
+        category: "candlestick_patterns"
+    },
+    {
+        title: "Three White Soldiers",
+        content: `Three white soldiers is a strong bullish continuation pattern consisting of three consecutive bullish candles. Each candle opens within the previous candle's body and closes higher than the previous close. Bodies should be large with small wicks. This pattern shows sustained buying pressure and trend strength. Entry: On pullback to the pattern or above the third candle. Best used after a consolidation or minor pullback in an uptrend.`,
+        category: "candlestick_patterns"
+    },
+    {
+        title: "Three Black Crows",
+        content: `Three black crows is a bearish continuation pattern with three consecutive bearish candles. Each opens within the previous body and closes lower. Large bodies with small wicks show strong selling pressure. Entry: Below the third candle's low or on retest. Stop Loss: Above the first candle's high. This pattern indicates sustained distribution and trend continuation to the downside.`,
+        category: "candlestick_patterns"
+    },
+    {
+        title: "Tweezer Tops and Bottoms",
+        content: `Tweezer patterns are two-candle reversal formations. Tweezer Top: Two candles at a high with nearly identical highs - first bullish, second bearish. Signals resistance and potential reversal. Tweezer Bottom: Two candles at a low with nearly identical lows - first bearish, second bullish. Signals support and potential reversal. Entry: After the second candle confirms direction. These patterns are especially powerful at key support/resistance zones.`,
         category: "candlestick_patterns"
     }
 ];

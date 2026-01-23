@@ -95,8 +95,10 @@ const AIInsights = () => {
         return () => clearInterval(interval);
     }, [loading]);
 
+
+
     const [layout, setLayout] = useState('BALANCED'); // BALANCED, DATA, CHART
-    const [activeTab, setActiveTab] = useState('STRUCTURE'); // STRUCTURE, LOGIC, HISTORY
+    const [activeSubTab, setActiveSubTab] = useState('STRUCTURE'); // STRUCTURE, LOGIC, HISTORY
 
     // Save/Load layout
     useEffect(() => {
@@ -196,7 +198,7 @@ const AIInsights = () => {
                                 className="bg-white/5 border border-white/5 text-white text-[10px] font-black uppercase tracking-wider rounded-lg px-4 py-2 hover:bg-white/10 outline-none transition-all cursor-pointer"
                             >
                                 {assets.map(a => (
-                                    <option key={a} value={a} className="bg-bg-deep">{assetType === 'crypto' ? `${a}/USDT` : a}</option>
+                                    <option key={a} value={a} className="bg-neutral-900 text-white">{assetType === 'crypto' ? `${a}/USDT` : a}</option>
                                 ))}
                             </select>
 
@@ -281,14 +283,12 @@ const AIInsights = () => {
                                         ))}
                                     </div>
                                 </div>
-                                <div className={`transition-all duration-500 ${layout === 'CHART' ? 'h-[600px]' : 'h-[450px]'}`}>
-                                    <iframe
-                                        key={`${selectedAsset}-${selectedTimeframe}`}
-                                        src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_widget&symbol=${getTradingViewSymbol()}&interval=${selectedTimeframe === '15m' ? '15' : selectedTimeframe === '30m' ? '30' : selectedTimeframe === '1h' ? '60' : '240'}&hidesidetoolbar=0&symboledit=0&saveimage=0&toolbarbg=1a1a2e&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC&withdateranges=1&hideideas=1&locale=en`}
-                                        style={{ width: '100%', height: '100%', border: 'none' }}
-                                    />
+                                <div className={`transition-all duration-500 relative ${layout === 'CHART' ? 'h-[600px]' : 'h-[450px]'}`}>
+                                    <AIChartWidget symbol={getTradingViewSymbol()} theme="dark" />
                                 </div>
                             </div>
+                            {/* Chart HUD */}
+
 
                             {/* Intelligence Tabs */}
                             <div className="glass-panel overflow-hidden border-white/5 bg-black/20">
@@ -301,13 +301,13 @@ const AIInsights = () => {
                                     ].map(tab => (
                                         <button
                                             key={tab.id}
-                                            onClick={() => setActiveTab(tab.id)}
-                                            className={`flex items-center gap-2 px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative ${activeTab === tab.id ? 'text-white' : 'text-dim hover:text-white'
+                                            onClick={() => setActiveSubTab(tab.id)}
+                                            className={`flex items-center gap-2 px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all relative ${activeSubTab === tab.id ? 'text-white' : 'text-dim hover:text-white'
                                                 }`}
                                         >
-                                            <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? 'text-purple-400' : 'text-dim'}`} />
+                                            <tab.icon className={`w-3.5 h-3.5 ${activeSubTab === tab.id ? 'text-purple-400' : 'text-dim'}`} />
                                             {tab.label}
-                                            {activeTab === tab.id && (
+                                            {activeSubTab === tab.id && (
                                                 <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-500" />
                                             )}
                                         </button>
@@ -315,7 +315,7 @@ const AIInsights = () => {
                                 </div>
 
                                 <div className="p-6">
-                                    {activeTab === 'STRUCTURE' && (
+                                    {activeSubTab === 'STRUCTURE' && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                             <div className="space-y-4">
                                                 <div>
@@ -369,7 +369,7 @@ const AIInsights = () => {
                                         </div>
                                     )}
 
-                                    {activeTab === 'LOGIC' && (
+                                    {activeSubTab === 'LOGIC' && (
                                         <div className="space-y-6">
                                             <div className="p-6 bg-white/[0.02] border border-white/5 rounded-2xl relative overflow-hidden">
                                                 <div className="absolute top-0 right-0 p-4 opacity-5">
@@ -400,7 +400,7 @@ const AIInsights = () => {
                                         </div>
                                     )}
 
-                                    {activeTab === 'OPERATIONS' && (
+                                    {activeSubTab === 'OPERATIONS' && (
                                         <div className="space-y-6">
                                             {/* Operation Performance Strip */}
                                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -484,7 +484,7 @@ const AIInsights = () => {
                                         </div>
                                     )}
 
-                                    {activeTab === 'HISTORY' && (
+                                    {activeSubTab === 'HISTORY' && (
                                         <div className="overflow-x-auto">
                                             <table className="w-full">
                                                 <thead className="text-[10px] text-dim uppercase font-black">
@@ -525,9 +525,29 @@ const AIInsights = () => {
                                 }`}>
                                 <div className="flex justify-between items-center mb-6">
                                     <span className="text-[10px] text-dim font-black uppercase tracking-widest">Quantum Verdict</span>
-                                    <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] ${data.analysis.dataSource === 'live' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                    {/* Data Source Badge */}
+                                    <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] flex items-center gap-1.5 ${data.analysis.dataSource === 'live'
+                                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                            : data.analysis.dataSource === 'technical'
+                                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                                : 'bg-neutral-500/10 text-neutral-400 border border-neutral-500/20'
                                         }`}>
-                                        {data.analysis.dataSource} Engine
+                                        {data.analysis.dataSource === 'live' ? (
+                                            <>
+                                                <Sparkles className="w-3 h-3" />
+                                                Gemini AI
+                                            </>
+                                        ) : data.analysis.dataSource === 'technical' ? (
+                                            <>
+                                                <Zap className="w-3 h-3" />
+                                                Local Engine
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Activity className="w-3 h-3" />
+                                                Simulation
+                                            </>
+                                        )}
                                     </div>
                                 </div>
 
@@ -560,8 +580,8 @@ const AIInsights = () => {
                                 <div className="space-y-2">
                                     {[
                                         { label: 'Market Entry', value: data.analysis.entry, color: 'text-white' },
-                                        { label: 'Risk Barrier (SL)', value: data.analysis.stopLoss, color: 'text-red-400' },
-                                        { label: 'Extraction Node (TP)', value: data.analysis.takeProfit, color: 'text-emerald-400' }
+                                        { label: 'Stop Loss (SL)', value: data.analysis.stopLoss, color: 'text-red-400' },
+                                        { label: 'Take Profit (TP)', value: data.analysis.takeProfit, color: 'text-emerald-400' }
                                     ].map((coord, i) => (
                                         <div key={i} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
                                             <span className="text-[10px] text-dim font-bold uppercase tracking-widest">{coord.label}</span>
@@ -674,6 +694,54 @@ const AIInsights = () => {
                 )}
             </div>
         </div>
+    );
+};
+
+// Optimized Chart Component
+const AIChartWidget = ({ symbol, theme }) => {
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+
+        // Clear existing
+        containerRef.current.innerHTML = '';
+
+        const script = document.createElement('script');
+        script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+        script.type = 'text/javascript';
+        script.async = true;
+        script.innerHTML = JSON.stringify({
+            autosize: true,
+            symbol: symbol,
+            interval: "60",
+            timezone: "Etc/UTC",
+            theme: theme,
+            style: "1",
+            locale: "en",
+            enable_publishing: false,
+            backgroundColor: "rgba(10, 14, 23, 1)",
+            gridColor: "rgba(255, 255, 255, 0.05)",
+            hide_top_toolbar: false,
+            hide_legend: false,
+            save_image: false,
+            calendar: false,
+            hide_volume: false,
+            support_host: "https://www.tradingview.com"
+        });
+
+        const widgetContainer = document.createElement('div');
+        widgetContainer.className = 'tradingview-widget-container__widget';
+        widgetContainer.style.height = '100%';
+        widgetContainer.style.width = '100%';
+
+        containerRef.current.appendChild(widgetContainer);
+        containerRef.current.appendChild(script);
+
+    }, [symbol, theme]);
+
+    return (
+        <div className="tradingview-widget-container h-full w-full" ref={containerRef} />
     );
 };
 

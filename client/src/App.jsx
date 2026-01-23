@@ -12,7 +12,9 @@ import { useSocket } from './hooks/useSocket';
 
 function App() {
     const [activeTab, setActiveTab] = useState(() => {
-        return localStorage.getItem('traders_hub_active_tab') || 'news';
+        const saved = localStorage.getItem('traders_hub_active_tab');
+        const validTabs = ['news', 'prices', 'charts', 'insights', 'chat'];
+        return (saved && validTabs.includes(saved)) ? saved : 'news';
     });
 
     useEffect(() => {
