@@ -212,8 +212,8 @@ export async function analyzeMarketStructure(symbol, currentInterval, candlesDat
             const stats = await getStats();
             if (stats.initialized && stats.documentCount > 0) {
                 // Search for relevant candlestick patterns and trading knowledge
-                const searchQuery = `candlestick patterns ${symbol} ${assetType} trading analysis market structure`;
-                const relevantDocs = await searchDocuments(searchQuery, 3);
+                const searchQuery = `candlestick patterns ${symbol} ${assetType} trading analysis market structure AxiTrader Hat-Trick strategy 13 Pro Tips chart setups`;
+                const relevantDocs = await searchDocuments(searchQuery, 10); // Increase count for better context
 
                 if (relevantDocs && relevantDocs.length > 0) {
                     knowledgeContext = '\n=== RELEVANT TRADING KNOWLEDGE ===\n';
@@ -228,7 +228,7 @@ export async function analyzeMarketStructure(symbol, currentInterval, candlesDat
             // RAG is optional - continue without it if it fails
             console.log('⚠️  RAG retrieval skipped:', ragError.message);
         }
-        const prompt = `You are a Master Trader AI with encyclopedic knowledge of "The Candlestick Trading Bible" and Price Action.
+        const prompt = `You are a Master Trader AI with encyclopedic knowledge of "The Candlestick Trading Bible", AxiTrader's "13 Pro Tips for Chart Setups", and the "Hat-Trick" entry/exit strategies.
 
 Your goal is MULTI-TIMEFRAME CONFLUENCE (MTC) analysis. Look for alignments across different time intervals.
 
@@ -250,12 +250,14 @@ ${newsContext}
 
 ${knowledgeContext}
 
-TASKS:
+Task description:
 1. Identify Market Structure across all timeframes. High timeframe (HTF) trend is DOMINANT.
 2. Look for "Quantum Alignment": If all timeframes point in the same direction, confidence is HIGH.
-3. Evaluate News Impact: Does the news support or conflict with technicals?
-4. Provide a TAILORED TRADE SETUP for $${accountSize}.
-5. Categorize the signal: BUY, SELL, or WAIT.
+3. Apply AxiTrader's "13 Pro Tips": Look for specific chart setups, volume clusters, and institutional footprints.
+4. Utilize "Hat-Trick" Strategies: If a Hat-Trick setup (e.g., 3-candle confirmation, specific RSI/Price divergence) is detected, prioritize it.
+5. Evaluate News Impact: Does the news support or conflict with technicals?
+6. Provide a TAILORED TRADE SETUP for $${accountSize}.
+7. Categorize the signal: BUY, SELL, or WAIT.
 
 Return STRICT JSON:
 {
@@ -271,19 +273,25 @@ Return STRICT JSON:
   "entry": number|null,
   "stopLoss": number|null,
   "takeProfit": number|null,
+  "breakEven": number|null,
+  "slRecommendation": "Why and when to move SL to break-even or specific level",
   "riskRewardRatio": "X:Y",
   "keyLevels": { "resistance": [], "support": [] },
-  "whyEnter": "Reasoning based on Confluence, Candles, and News",
+  "whyEnter": "Detailed reasoning based on Confluence, Candles, and News",
   "riskFactors": ["List of risk factors"],
   "tailoredSetup": "Specific instruction for $${accountSize}",
   "reasoning": "Anti-gravity/levitation metaphor summary"
 }
 
 RULES:
-- If signal is "WAIT", set entry/stopLoss/takeProfit to null.
-- Be PRECISE with entry/SL/TP based on the actual highs/lows provided.
+- If signal is "WAIT", set entry/stopLoss/takeProfit/breakEven to null.
+- Be PRECISE with entry/SL/TP/BreakEven based on the actual highs/lows provided.
+- Break Even should usually be the entry price or slightly above/below depending on the spread.
+- slRecommendation must be very specific for the user.
 - Use anti-gravity metaphors: "Refueling for lift-off", "Gravity test at support successful", "Atmospheric resistance detected", "Price entering zero-gravity zone".
-- Reference "The Candlestick Trading Bible" patterns explicitly.${knowledgeContext ? '\n- Cite specific sources from the knowledge base when applicable.' : ''}`;
+- Reference "The Candlestick Trading Bible" patterns explicitly.
+- Provide a BETTER analysis on the entry point, explaining specifically why this entry is high-probability.
+- Ensure whyEnter is more detailed as per user request.${knowledgeContext ? '\n- Cite specific sources from the knowledge base when applicable.' : ''}`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();

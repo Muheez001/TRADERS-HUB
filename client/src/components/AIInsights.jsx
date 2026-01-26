@@ -284,7 +284,7 @@ const AIInsights = () => {
                                     </div>
                                 </div>
                                 <div className={`transition-all duration-500 relative ${layout === 'CHART' ? 'h-[600px]' : 'h-[450px]'}`}>
-                                    <AIChartWidget symbol={getTradingViewSymbol()} theme="dark" />
+                                    <AIChartWidget symbol={getTradingViewSymbol()} timeframe={selectedTimeframe} theme="dark" />
                                 </div>
                             </div>
                             {/* Chart HUD */}
@@ -527,10 +527,10 @@ const AIInsights = () => {
                                     <span className="text-[10px] text-dim font-black uppercase tracking-widest">Quantum Verdict</span>
                                     {/* Data Source Badge */}
                                     <div className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] flex items-center gap-1.5 ${data.analysis.dataSource === 'live'
-                                            ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
-                                            : data.analysis.dataSource === 'technical'
-                                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                                                : 'bg-neutral-500/10 text-neutral-400 border border-neutral-500/20'
+                                        ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                                        : data.analysis.dataSource === 'technical'
+                                            ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                            : 'bg-neutral-500/10 text-neutral-400 border border-neutral-500/20'
                                         }`}>
                                         {data.analysis.dataSource === 'live' ? (
                                             <>
@@ -581,7 +581,8 @@ const AIInsights = () => {
                                     {[
                                         { label: 'Market Entry', value: data.analysis.entry, color: 'text-white' },
                                         { label: 'Stop Loss (SL)', value: data.analysis.stopLoss, color: 'text-red-400' },
-                                        { label: 'Take Profit (TP)', value: data.analysis.takeProfit, color: 'text-emerald-400' }
+                                        { label: 'Take Profit (TP)', value: data.analysis.takeProfit, color: 'text-emerald-400' },
+                                        { label: 'Break Even', value: data.analysis.breakEven, color: 'text-purple-400' }
                                     ].map((coord, i) => (
                                         <div key={i} className="flex items-center justify-between p-3 bg-white/[0.02] border border-white/5 rounded-xl">
                                             <span className="text-[10px] text-dim font-bold uppercase tracking-widest">{coord.label}</span>
@@ -589,6 +590,16 @@ const AIInsights = () => {
                                         </div>
                                     ))}
                                 </div>
+
+                                {data.analysis.slRecommendation && (
+                                    <div className="p-4 bg-purple-500/5 border border-purple-500/20 rounded-xl mt-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Shield className="w-3.5 h-3.5 text-purple-400" />
+                                            <span className="text-[10px] text-purple-400 font-black uppercase tracking-widest">Protocol Recommendation</span>
+                                        </div>
+                                        <p className="text-[11px] text-white leading-relaxed italic">"{data.analysis.slRecommendation}"</p>
+                                    </div>
+                                )}
 
                                 <div className="text-center pt-2">
                                     <span className="text-[9px] text-dim uppercase tracking-widest">Efficiency Multiplier</span>
@@ -698,7 +709,7 @@ const AIInsights = () => {
 };
 
 // Optimized Chart Component
-const AIChartWidget = ({ symbol, theme }) => {
+const AIChartWidget = ({ symbol, timeframe, theme }) => {
     const containerRef = useRef(null);
 
     useEffect(() => {
@@ -707,6 +718,16 @@ const AIChartWidget = ({ symbol, theme }) => {
         // Clear existing
         containerRef.current.innerHTML = '';
 
+        // Map timeframe to TradingView intervals
+        const intervalMap = {
+            '15m': '15',
+            '30m': '30',
+            '1h': '60',
+            '4h': '240',
+            '1d': 'D',
+            '1w': 'W'
+        };
+
         const script = document.createElement('script');
         script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
         script.type = 'text/javascript';
@@ -714,7 +735,7 @@ const AIChartWidget = ({ symbol, theme }) => {
         script.innerHTML = JSON.stringify({
             autosize: true,
             symbol: symbol,
-            interval: "60",
+            interval: intervalMap[timeframe] || "60",
             timezone: "Etc/UTC",
             theme: theme,
             style: "1",
@@ -738,7 +759,7 @@ const AIChartWidget = ({ symbol, theme }) => {
         containerRef.current.appendChild(widgetContainer);
         containerRef.current.appendChild(script);
 
-    }, [symbol, theme]);
+    }, [symbol, timeframe, theme]);
 
     return (
         <div className="tradingview-widget-container h-full w-full" ref={containerRef} />

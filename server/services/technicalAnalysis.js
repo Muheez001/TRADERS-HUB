@@ -116,6 +116,10 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     const entry = last.close;
     const stopLoss = signal === 'BUY' ? entry - (atr * slMultiplier) : entry + (atr * slMultiplier);
     const takeProfit = signal === 'BUY' ? entry + (atr * tpMultiplier) : entry - (atr * tpMultiplier);
+    const breakEven = entry; // Simple break even is entry price
+    const slRecommendation = signal === 'BUY'
+        ? `Move SL to break-even once price reaches ${(entry + (atr * 1)).toFixed(4)} (+1R). This secures the trade for a win-win scenario.`
+        : `Move SL to break-even once price reaches ${(entry - (atr * 1)).toFixed(4)} (+1R) to eliminate risk.`;
 
     // Build pattern description
     let patternDescription = '';
@@ -174,14 +178,16 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
         entry: signal === 'WAIT' ? null : entry,
         stopLoss: signal === 'WAIT' ? null : stopLoss,
         takeProfit: signal === 'WAIT' ? null : takeProfit,
+        breakEven: signal === 'WAIT' ? null : breakEven,
+        slRecommendation: signal === 'WAIT' ? "" : slRecommendation,
         riskRewardRatio: '1:2',
         keyLevels: {
             resistance: [entry + atr, entry + (atr * 2)],
             support: [entry - atr, entry - (atr * 2)]
         },
         whyEnter: allPatterns.length > 0
-            ? `${detectedPattern} pattern identified. EMA${crossedUp || crossedDown ? ' crossover confirms direction.' : ' alignment neutral.'} RSI at ${rsi.toFixed(1)}.`
-            : `EMA indicators show ${signal === 'BUY' ? 'bullish' : 'bearish'} trajectory. RSI is at ${rsi.toFixed(1)}, showing ${signal === 'BUY' ? 'strength' : 'weakness'}. ATR volatility is ${atr.toFixed(4)}.`,
+            ? `${detectedPattern} pattern identified. This structure suggests a powerful ${signal === 'BUY' ? 'upward' : 'downward'} propulsion. EMA${crossedUp || crossedDown ? ' crossover confirms direction.' : ' alignment neutral.'} RSI at ${rsi.toFixed(1)} confirms momentum.`
+            : `EMA indicators show ${signal === 'BUY' ? 'bullish' : 'bearish'} trajectory. RSI is at ${rsi.toFixed(1)}, showing ${signal === 'BUY' ? 'strength' : 'weakness'}. ATR volatility is ${atr.toFixed(4)}, providing optimal orbital window.`,
         riskFactors: [
             'Local engine analysis (No Gemini AI)',
             allPatterns.length > 0 ? 'Pattern-based signal' : 'Indicator-based signal',

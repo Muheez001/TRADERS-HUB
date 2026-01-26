@@ -6,8 +6,12 @@
 import { Pinecone } from '@pinecone-database/pinecone';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
+import fs from 'fs/promises';
+import path from 'path';
 
-dotenv.config();
+import { fileURLToPath } from 'url';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const PINECONE_API_KEY = process.env.PINECONE_API_KEY;
@@ -19,6 +23,10 @@ let index = null;
 
 const INDEX_NAME = 'forex-knowledge';
 const EMBEDDING_DIMENSION = 768; // Gemini text-embedding-004 dimension
+const LOCAL_STORE_PATH = path.join(process.cwd(), 'local-knowledge-base.json');
+
+let isLocal = false;
+let localDocuments = [];
 
 // Initialize Gemini Embedding Model
 if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here') {
@@ -33,11 +41,23 @@ if (PINECONE_API_KEY && PINECONE_API_KEY !== 'your_pinecone_api_key_here') {
 
 /**
  * Initialize the vector store (create index if needed)
+ * Fallback to local JSON store if Pinecone is not configured
  */
 export async function initializeVectorStore() {
     try {
         if (!pinecone) {
-            throw new Error('Pinecone API key not configured');
+            console.log('⚠️ Pinecone not configured. Using local JSON vector store fallback.');
+            isLocal = true;
+            try {
+                const data = await fs.readFile(LOCAL_STORE_PATH, 'utf-8');
+                localDocuments = JSON.parse(data);
+                console.log(`✅ Loaded ${localDocuments.length} documents from local storage`);
+            } catch (err) {
+                console.log('📝 Local storage not found, starting fresh.');
+                localDocuments = [];
+                await fs.writeFile(LOCAL_STORE_PATH, JSON.stringify([]));
+            }
+            return { success: true, type: 'local' };
         }
 
         // Check if index exists
@@ -66,9 +86,15 @@ export async function initializeVectorStore() {
         index = pinecone.index(INDEX_NAME);
         console.log(`✅ Connected to Pinecone index: ${INDEX_NAME}`);
 
-        return { success: true, index: INDEX_NAME };
+        return { success: true, index: INDEX_NAME, type: 'cloud' };
     } catch (error) {
         console.error('❌ Vector Store initialization error:', error.message);
+        // Secondary fallback to local on generic error
+        if (!isLocal) {
+            console.log('🔄 Error encountered, falling back to local store...');
+            isLocal = true;
+            return { success: true, type: 'local_fallback' };
+        }
         return { success: false, error: error.message };
     }
 }
@@ -78,10 +104,12 @@ export async function initializeVectorStore() {
  */
 async function generateEmbedding(text) {
     if (!embedModel) {
+        console.error('❌ Embed model not initialized. API Key presence:', !!GEMINI_API_KEY);
         throw new Error('Gemini embedding model not initialized');
     }
 
     try {
+        console.log(`📡 Generating embedding for text (${text.length} chars)...`);
         const result = await embedModel.embedContent(text);
         return result.embedding.values;
     } catch (error) {
@@ -95,7 +123,7 @@ async function generateEmbedding(text) {
  * @param {Array} documents - Array of {id, text, metadata}
  */
 export async function addDocuments(documents) {
-    if (!index) {
+    if (!index && !isLocal) {
         throw new Error('Vector store not initialized. Call initializeVectorStore() first.');
     }
 
@@ -115,6 +143,13 @@ export async function addDocuments(documents) {
             })
         );
 
+        if (isLocal) {
+            localDocuments.push(...vectors);
+            await fs.writeFile(LOCAL_STORE_PATH, JSON.stringify(localDocuments, null, 2));
+            console.log(`✅ Added ${documents.length} documents to local storage`);
+            return { success: true, count: documents.length };
+        }
+
         // Upsert to Pinecone (batch of 100 max)
         for (let i = 0; i < vectors.length; i += 100) {
             const batch = vectors.slice(i, i + 100);
@@ -130,17 +165,51 @@ export async function addDocuments(documents) {
 }
 
 /**
+ * Simple cosine similarity calculation
+ */
+function cosineSimilarity(vecA, vecB) {
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    for (let i = 0; i < vecA.length; i++) {
+        dotProduct += vecA[i] * vecB[i];
+        normA += vecA[i] * vecA[i];
+        normB += vecB[i] * vecB[i];
+    }
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+/**
  * Search for relevant documents using semantic similarity
  * @param {string} query - Search query
  * @param {number} topK - Number of results to return (default: 5)
  */
 export async function searchDocuments(query, topK = 5) {
-    if (!index) {
+    if (!index && !isLocal) {
         throw new Error('Vector store not initialized');
     }
 
     try {
         const queryEmbedding = await generateEmbedding(query);
+
+        if (isLocal) {
+            console.log(`🔍 Searching local store (${localDocuments.length} docs)...`);
+            const scores = localDocuments.map(doc => ({
+                ...doc,
+                score: cosineSimilarity(queryEmbedding, doc.values)
+            }));
+
+            const topMatches = scores
+                .sort((a, b) => b.score - a.score)
+                .slice(0, topK);
+
+            return topMatches.map(match => ({
+                text: match.metadata.text,
+                metadata: match.metadata,
+                distance: 1 - match.score,
+                id: match.id
+            }));
+        }
 
         const results = await index.query({
             vector: queryEmbedding,
@@ -172,6 +241,14 @@ export async function getStats() {
     }
 
     try {
+        if (isLocal) {
+            return {
+                initialized: true,
+                type: 'local',
+                documentCount: localDocuments.length
+            };
+        }
+
         const stats = await index.describeIndexStats();
         return {
             initialized: true,
@@ -189,11 +266,17 @@ export async function getStats() {
  * Delete all documents from index (use carefully!)
  */
 export async function clearCollection() {
-    if (!index) {
+    if (!index && !isLocal) {
         throw new Error('Vector store not initialized');
     }
 
     try {
+        if (isLocal) {
+            localDocuments = [];
+            await fs.writeFile(LOCAL_STORE_PATH, JSON.stringify([]));
+            console.log('✅ All documents cleared from local storage');
+            return { success: true };
+        }
         await index.deleteAll();
         console.log('✅ All documents cleared from Pinecone index');
         return { success: true };
