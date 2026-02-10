@@ -385,59 +385,129 @@ const AIInsights = () => {
                                 </div>
 
                                 <div className="p-6">
-                                    {activeSubTab === 'STRUCTURE' && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <span className="text-[10px] text-purple-400 font-black uppercase tracking-widest block mb-2">Primary Pattern</span>
-                                                    <p className="text-xl font-bold text-white font-mono">{data.analysis.pattern}</p>
+                                    {data.analysis.status === 'no_setup' ? (
+                                        <div className="flex flex-col items-center justify-center py-12 text-center space-y-6">
+                                            <div className="w-20 h-20 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20">
+                                                <TrendingUp className="w-10 h-10 text-yellow-500/50" />
+                                            </div>
+                                            <div className="max-w-md space-y-2">
+                                                <h3 className="text-xl font-bold text-white">No High-Conviction Setup</h3>
+                                                <p className="text-gray-400 text-sm leading-relaxed">{data.analysis.reason}</p>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+                                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                                    <span className="text-xs text-dim uppercase tracking-wider font-bold">Current Bias</span>
+                                                    <div className="text-white font-mono mt-1">{data.analysis.current_bias}</div>
                                                 </div>
-                                                <div>
-                                                    <span className="text-[10px] text-dim font-black uppercase tracking-widest block mb-1">Architecture Narrative</span>
-                                                    <p className="text-xs text-dim leading-relaxed">{data.analysis.marketStructure}</p>
+                                                <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                                                    <span className="text-xs text-dim uppercase tracking-wider font-bold">Watch Levels</span>
+                                                    <div className="text-white font-mono mt-1 text-sm">
+                                                        {data.analysis.watch_levels?.map(l => l.toFixed(2)).join(', ')}
+                                                    </div>
                                                 </div>
                                             </div>
+                                            {data.analysis.next_catalysts && (
+                                                <div className="w-full max-w-sm p-4 bg-blue-500/5 rounded-xl border border-blue-500/10 text-left">
+                                                    <span className="text-[10px] text-blue-400 uppercase tracking-wider font-bold mb-2 block">Upcoming Catalysts</span>
+                                                    <ul className="list-disc list-inside text-xs text-blue-300 space-y-1">
+                                                        {data.analysis.next_catalysts.map((c, i) => (
+                                                            <li key={i}>{c}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : activeSubTab === 'STRUCTURE' ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                             <div className="space-y-6">
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div className="p-4 bg-red-500/5 rounded-xl border border-red-500/10">
-                                                        <span className="hud-label !text-red-400">Resistance Node</span>
-                                                        <div className="hud-value text-lg mt-1">
-                                                            ${data.analysis.keyLevels?.resistance?.[0]?.toFixed(2) || 'N/A'}
+                                                <div>
+                                                    <span className="text-[10px] text-emerald-400 font-black uppercase tracking-widest block mb-2">
+                                                        High-Conviction Setup ({data.analysis.confidence}%)
+                                                    </span>
+                                                    <div className="flex items-center gap-3 mb-4">
+                                                        <span className={`text-3xl font-bold font-mono ${data.analysis.direction === 'Long' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                            {data.analysis.direction ? data.analysis.direction.toUpperCase() : 'WAIT'}
+                                                        </span>
+                                                        <span className="px-2 py-1 bg-white/10 rounded text-xs font-mono text-white">
+                                                            {data.analysis.timeframe}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-300 leading-relaxed border-l-2 border-white/10 pl-4">
+                                                        {data.analysis.rationale}
+                                                    </p>
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    <span className="text-[10px] text-dim font-black uppercase tracking-widest block">Confluence Factors</span>
+                                                    <ul className="space-y-2">
+                                                        {data.analysis.confluence_factors?.map((factor, i) => (
+                                                            <li key={i} className="flex items-start gap-2 text-xs text-gray-400">
+                                                                <div className="w-1 h-1 rounded-full bg-purple-500 mt-1.5 shrink-0" />
+                                                                {factor}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-6">
+                                                {/* Trade Plan HUD */}
+                                                <div className="bg-white/[0.02] rounded-xl border border-white/5 p-5 space-y-4">
+                                                    <div className="grid grid-cols-2 gap-6">
+                                                        <div>
+                                                            <span className="hud-label">Entry</span>
+                                                            <div className="hud-value text-white">${data.analysis.entry?.toFixed(2)}</div>
+                                                        </div>
+                                                        <div>
+                                                            <span className="hud-label">Stop Loss</span>
+                                                            <div className="hud-value text-red-400">${data.analysis.stop_loss?.toFixed(2)}</div>
+                                                        </div>
+                                                        <div>
+                                                            <span className="hud-label">Take Profit</span>
+                                                            <div className="hud-value text-emerald-400">${data.analysis.take_profit?.toFixed(2)}</div>
+                                                        </div>
+                                                        <div>
+                                                            <span className="hud-label">Risk/Reward</span>
+                                                            <div className="hud-value text-purple-400">{data.analysis.rr_ratio}R</div>
                                                         </div>
                                                     </div>
-                                                    <div className="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                                                        <span className="hud-label !text-emerald-400">Support Node</span>
-                                                        <div className="hud-value text-lg mt-1">
-                                                            ${data.analysis.keyLevels?.support?.[0]?.toFixed(2) || 'N/A'}
+                                                    <div className="pt-4 border-t border-white/5 grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <span className="text-[10px] text-dim uppercase">Position Size</span>
+                                                            <div className="text-sm font-mono text-white">{data.analysis.position_size} Units</div>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[10px] text-dim uppercase">Risk ($)</span>
+                                                            <div className="text-sm font-mono text-red-300">${data.analysis.dollar_risk}</div>
                                                         </div>
                                                     </div>
                                                 </div>
 
-                                                {/* Quantum Confluence Indicators */}
-                                                <div className="space-y-3 p-4 bg-white/[0.02] rounded-xl border border-white/5">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <span className="hud-label">Quantum Alignment</span>
-                                                        <span className="text-[10px] font-mono text-purple-400">{data.analysis.mtcAlignment || 'Analyzing Layers...'}</span>
+                                                {/* Risk Management */}
+                                                <div className="p-4 bg-red-500/5 rounded-xl border border-red-500/10">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <AlertTriangle className="w-3 h-3 text-red-400" />
+                                                        <span className="text-[10px] text-red-400 font-bold uppercase">Risks</span>
                                                     </div>
-                                                    <div className="grid grid-cols-3 gap-3">
-                                                        {[1, 2, 3].map(lvl => (
-                                                            <div key={lvl} className="space-y-1.5">
-                                                                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                                                                    <motion.div
-                                                                        initial={{ width: 0 }}
-                                                                        animate={{ width: '100%' }}
-                                                                        transition={{ delay: 0.1 * lvl }}
-                                                                        className={`h-full ${data.analysis.signal === 'BUY' ? 'bg-emerald-500' : 'bg-red-500'}`}
-                                                                    />
-                                                                </div>
-                                                                <span className="text-[8px] font-black text-dim uppercase tracking-tighter block text-center">Layer {lvl}</span>
-                                                            </div>
+                                                    <ul className="space-y-1">
+                                                        {data.analysis.risks?.map((r, i) => (
+                                                            <li key={i} className="text-[10px] text-red-300/80">• {r}</li>
                                                         ))}
+                                                    </ul>
+                                                </div>
+
+                                                <div className="p-4 bg-blue-500/5 rounded-xl border border-blue-500/10">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Shield className="w-3 h-3 text-blue-400" />
+                                                        <span className="text-[10px] text-blue-400 font-bold uppercase">Active Management</span>
                                                     </div>
+                                                    <p className="text-xs text-blue-300/80 leading-relaxed">
+                                                        {data.analysis.management}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </div>
-                                    )}
+                                    ) : null}
 
                                     {activeSubTab === 'INDICATORS' && (
                                         <div className="space-y-6">
