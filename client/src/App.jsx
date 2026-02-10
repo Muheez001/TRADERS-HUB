@@ -9,6 +9,7 @@ import ParticleBackground from './components/ParticleBackground';
 import TradingViewChart from './components/TradingViewChart';
 import AIInsights from './components/AIInsights';
 import { useSocket } from './hooks/useSocket';
+import { AuthProvider } from './context/AuthContext';
 
 function App() {
     const [activeTab, setActiveTab] = useState(() => {
@@ -38,7 +39,10 @@ function App() {
             </motion.div>
 
             {/* Navbar */}
-            <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+            <Navbar
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+            />
 
             {/* Price Ticker */}
             <PriceTicker prices={prices} />

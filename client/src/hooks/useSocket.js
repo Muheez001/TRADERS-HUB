@@ -90,5 +90,6 @@ export function useSocket() {
         prices,
         chatMessages,
         sendChatMessage,
+        socket: socketRef.current,
     };
 }

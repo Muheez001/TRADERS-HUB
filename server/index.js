@@ -12,8 +12,8 @@ import cron from 'node-cron';
 
 import { fetchNews, fetchCryptoPrices, fetchForexPrices, fetchCommodityPrices, fetchCandles, fetchForexCandles } from './services/dataFetcher.js';
 import { analyzeNewsImpact, analyzeMarketStructure } from './services/aiAnalyst.js';
-import { logSignal, getSignalHistory } from './services/signalTracker.js';
 import { initializeVectorStore } from './services/vectorStore.js';
+import { logSignalToDb, shouldPauseTrading, getRecentSignals, checkDatabaseHealth, getPerformanceStats } from './services/supabaseService.js';
 import knowledgeRoutes from './routes/knowledgeRoutes.js';
 
 dotenv.config();
@@ -67,6 +67,76 @@ app.get('/api/prices/:type', (req, res) => {
 // Knowledge Base Routes
 app.use('/api/knowledge', knowledgeRoutes);
 
+// ==========================================
+// NEW: Performance & Signal Management APIs
+// ==========================================
+
+/**
+ * Get trading performance statistics
+ * GET /api/performance?range=day|week|month|all
+ */
+app.get('/api/performance', async (req, res) => {
+    try {
+        const range = req.query.range || 'all';
+        const stats = await getPerformanceStats(range);
+        res.json({ success: true, data: stats });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+/**
+ * Get recent signals from database
+ * GET /api/signals?symbol=BTC&status=OPEN&limit=20
+ */
+app.get('/api/signals', async (req, res) => {
+    try {
+        const signals = await getRecentSignals({
+            symbol: req.query.symbol,
+            status: req.query.status,
+            limit: parseInt(req.query.limit) || 50
+        });
+        res.json({ success: true, data: signals });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+/**
+ * Update signal outcome (when trade closes)
+ * POST /api/signals/:id/outcome
+ * Body: { outcome: 'WIN'|'LOSS'|'BREAKEVEN', exitPrice: number, actualPnl: number }
+ */
+app.post('/api/signals/:id/outcome', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { outcome, exitPrice, actualPnl } = req.body;
+
+        const { updateSignalOutcome } = await import('./services/supabaseService.js');
+        const updated = await updateSignalOutcome(id, outcome, exitPrice, actualPnl);
+
+        if (updated) {
+            // Emit outcome to connected clients
+            io.emit('signal:closed', { id, outcome, actualPnl });
+            res.json({ success: true, data: updated });
+        } else {
+            res.status(404).json({ success: false, message: 'Signal not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+});
+
+/**
+ * Database health check
+ * GET /api/health/db
+ */
+app.get('/api/health/db', async (req, res) => {
+    const health = await checkDatabaseHealth();
+    res.json(health);
+});
+
+
 /**
  * Enhanced Insights API - Supports both Crypto and Forex
  * GET /api/insights/:symbol/:timeframe?type=crypto|forex
@@ -76,8 +146,10 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
         const { symbol, timeframe } = req.params;
         const assetType = req.query.type || 'crypto';
         const accountSize = req.query.accountSize || 500;
+        const riskAmount = req.query.riskAmount || 50;
+        const targetGain = req.query.targetGain || 100;
 
-        console.log(`🔍 Analyzing ${symbol} (${assetType}) on ${timeframe} for $${accountSize} account...`);
+        console.log(`🔍 Analyzing ${symbol} (${assetType}) on ${timeframe} for $${accountSize} account (Risk: $${riskAmount}, Gain: $${targetGain})...`);
 
         let candles, secondaryCandles, tertiaryCandles;
         let cleanSymbol = symbol;
@@ -97,6 +169,8 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
             if (!cleanSymbol.includes('/') && cleanSymbol.length === 6) {
                 cleanSymbol = cleanSymbol.slice(0, 3) + '/' + cleanSymbol.slice(3);
             }
+            // Handle BTC-USD forex case
+            if (symbol === 'BTC-USD') cleanSymbol = 'BTC/USD';
             [candles, secondaryCandles, tertiaryCandles] = await Promise.all([
                 fetchForexCandles(cleanSymbol, activeIntervals[0]),
                 fetchForexCandles(cleanSymbol, activeIntervals[1]),
@@ -127,12 +201,42 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
             },
             assetType,
             accountSize,
+            riskAmount,
+            targetGain,
             relevantNews
         );
 
-        // PERSISTENCE: Log this signal for the "Last 5 Signals" feature
+        // === PHASE 1 IMPROVEMENTS ===
+        const MIN_CONFIDENCE = 70; // Only accept high-confidence signals
+
+        // 1. Check for consecutive losses (pause if 3+ in a row)
+        const pauseCheck = await shouldPauseTrading(3);
+        if (pauseCheck.shouldPause) {
+            analysis.tradingPaused = true;
+            analysis.pauseReason = pauseCheck.reason;
+            analysis.recommendation = pauseCheck.recommendation;
+            analysis.originalSignal = analysis.signal;
+            analysis.signal = 'WAIT'; // Force WAIT during cooling off
+            console.log(`⛔ Trading paused: ${pauseCheck.reason}`);
+        }
+
+        // 2. Confidence gating - reject low confidence signals
+        if (analysis.signal !== 'WAIT' && analysis.confidence < MIN_CONFIDENCE) {
+            console.log(`⚠️ Signal rejected: Confidence ${analysis.confidence}% below threshold ${MIN_CONFIDENCE}%`);
+            analysis.originalSignal = analysis.signal;
+            analysis.originalConfidence = analysis.confidence;
+            analysis.signal = 'WAIT';
+            analysis.signalRejected = true;
+            analysis.rejectionReason = `Confidence ${analysis.confidence}% is below minimum threshold of ${MIN_CONFIDENCE}%`;
+        }
+
+        // 3. PERSISTENCE: Log signal to Supabase only
         if (analysis && analysis.signal !== 'WAIT') {
-            logSignal(analysis, cleanSymbol, timeframe);
+            // Log to Supabase
+            const dbSignal = await logSignalToDb(analysis, cleanSymbol, timeframe);
+            if (dbSignal) {
+                analysis.signalId = dbSignal.id; // Attach DB ID for outcome tracking
+            }
         }
 
         res.json({
@@ -143,7 +247,7 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
                 timeframe,
                 candles,
                 analysis,
-                history: getSignalHistory().slice(0, 10) // Send recent history too
+                history: [] // Signal history tracking removed
             }
         });
     } catch (error) {

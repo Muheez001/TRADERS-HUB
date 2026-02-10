@@ -1,67 +1,15 @@
 /**
  * Technical Analysis Service
  * Provides indicators-based trading signals when Gemini is unavailable.
- * Enhanced with candlestick pattern detection from "The Candlestick Trading Bible"
+ * Enhanced with candlestick pattern detection and multi-indicator confluence
  */
 
 import { detectPatterns } from './candlestickPatterns.js';
-
-/**
- * Calculate Exponential Moving Average (EMA)
- */
-function calculateEMA(data, period) {
-    if (!data || data.length === 0) return 0;
-    const k = 2 / (period + 1);
-    let ema = data[0].close;
-    for (let i = 1; i < data.length; i++) {
-        ema = data[i].close * k + ema * (1 - k);
-    }
-    return ema;
-}
-
-/**
- * Calculate Relative Strength Index (RSI)
- */
-function calculateRSI(data, period = 14) {
-    if (data.length <= period) return 50;
-
-    let gains = 0;
-    let losses = 0;
-
-    for (let i = data.length - period; i < data.length; i++) {
-        const diff = data[i].close - data[i - 1].close;
-        if (diff >= 0) gains += diff;
-        else losses -= diff;
-    }
-
-    const avgGain = gains / period;
-    const avgLoss = losses / period;
-
-    if (avgLoss === 0) return 100;
-    const rs = avgGain / avgLoss;
-    return 100 - (100 / (1 + rs));
-}
-
-/**
- * Calculate Average True Range (ATR)
- */
-function calculateATR(data, period = 14) {
-    if (data.length <= period) return (data[data.length - 1]?.close || 0) * 0.01;
-
-    let trSum = 0;
-    for (let i = data.length - period; i < data.length; i++) {
-        const high = data[i].high;
-        const low = data[i].low;
-        const prevClose = data[i - 1].close;
-        const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-        trSum += tr;
-    }
-    return trSum / period;
-}
+import { calculateAllIndicators, calculateATR, calculateEMA } from './indicators.js';
 
 /**
  * Generate technical signal and setup
- * Now enhanced with candlestick pattern detection
+ * Now enhanced with multi-indicator confluence analysis
  */
 export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     if (!candles || candles.length < 2) {
@@ -71,110 +19,127 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
     const last = candles[candles.length - 1];
     const prev = candles[candles.length - 2];
 
-    // Indicators
-    const ema9 = calculateEMA(candles.slice(-9), 9);
-    const ema21 = calculateEMA(candles.slice(-21), 21);
-    const rsi = calculateRSI(candles, 14);
-    const atr = calculateATR(candles, 14);
+    // === CALCULATE ALL INDICATORS ===
+    const indicators = calculateAllIndicators(candles);
+    const { rsi, macd, bollingerBands, volume, adx, stochastic, atr, ema, confluenceScore, confluenceBias, confluenceFactors } = indicators;
 
     // === CANDLESTICK PATTERN DETECTION ===
-    const patternResult = detectPatterns(candles.slice(-10)); // Last 10 candles for pattern detection
+    const patternResult = detectPatterns(candles.slice(-10));
     const detectedPattern = patternResult.pattern;
     const patternSignal = patternResult.signal;
     const allPatterns = patternResult.patterns;
 
-    // Logic: EMA Cross
-    const crossedUp = last.close > ema9 && last.close > ema21 && (prev.close <= ema9 || prev.close <= ema21);
-    const crossedDown = last.close < ema9 && last.close < ema21 && (prev.close >= ema9 || prev.close >= ema21);
-
+    // === SIGNAL GENERATION ===
     let signal = 'WAIT';
     let confidence = 50;
 
-    // Candlestick patterns take priority if detected
-    if (patternSignal !== 'WAIT' && allPatterns.length > 0) {
-        signal = patternSignal;
-        // Higher confidence for stronger patterns
-        const strongestPattern = allPatterns[0];
-        confidence = 55 + (strongestPattern.strength * 10); // 65-95% based on pattern strength
-
-        // Boost confidence if EMA confirms the pattern
-        if ((signal === 'BUY' && crossedUp) || (signal === 'SELL' && crossedDown)) {
-            confidence = Math.min(95, confidence + 10);
+    // Primary signal from confluence
+    if (confluenceScore >= 40) {
+        // Strong confluence - use bias as signal
+        if (confluenceBias === 'bullish') {
+            signal = 'BUY';
+            confidence = Math.min(95, 50 + confluenceScore * 0.5);
+        } else if (confluenceBias === 'bearish') {
+            signal = 'SELL';
+            confidence = Math.min(95, 50 + confluenceScore * 0.5);
         }
-    } else if (crossedUp && rsi < 70) {
-        signal = 'BUY';
-        confidence = rsi < 30 ? 85 : 65;
-    } else if (crossedDown && rsi > 30) {
-        signal = 'SELL';
-        confidence = rsi > 70 ? 85 : 65;
     }
 
-    // Levels based on ATR
-    const slMultiplier = assetType === 'forex' ? 2 : 1.5;
-    const tpMultiplier = 3; // 1:2 or 1:3 RR
+    // Candlestick patterns can override or boost confidence
+    if (patternSignal !== 'WAIT' && allPatterns.length > 0) {
+        const strongestPattern = allPatterns[0];
+        
+        // If pattern aligns with confluence, boost confidence
+        if ((patternSignal === 'BUY' && confluenceBias === 'bullish') ||
+            (patternSignal === 'SELL' && confluenceBias === 'bearish')) {
+            signal = patternSignal;
+            confidence = Math.min(95, confidence + 15);
+            confluenceFactors.push(`${strongestPattern.name} pattern confirms direction`);
+        }
+        // If no strong confluence, pattern can provide the signal
+        else if (confluenceScore < 40 && strongestPattern.strength >= 3) {
+            signal = patternSignal;
+            confidence = 55 + (strongestPattern.strength * 8);
+        }
+    }
+
+    // ADX filter: If market is ranging, reduce confidence for trend trades
+    if (!adx.trending && signal !== 'WAIT') {
+        confidence = Math.max(50, confidence - 10);
+        if (!confluenceFactors.includes('Market is ranging - lower confidence')) {
+            confluenceFactors.push('Market is ranging - lower confidence');
+        }
+    }
+
+    // === RISK MANAGEMENT LEVELS ===
+    const atrMultiplier = assetType === 'forex' ? 2 : 1.5;
+    const tpMultiplier = 3;
 
     const entry = last.close;
-    const stopLoss = signal === 'BUY' ? entry - (atr * slMultiplier) : entry + (atr * slMultiplier);
+    const stopLoss = signal === 'BUY' ? entry - (atr * atrMultiplier) : entry + (atr * atrMultiplier);
     const takeProfit = signal === 'BUY' ? entry + (atr * tpMultiplier) : entry - (atr * tpMultiplier);
-    const breakEven = entry; // Simple break even is entry price
+    const breakEven = entry;
     const slRecommendation = signal === 'BUY'
-        ? `Move SL to break-even once price reaches ${(entry + (atr * 1)).toFixed(4)} (+1R). This secures the trade for a win-win scenario.`
-        : `Move SL to break-even once price reaches ${(entry - (atr * 1)).toFixed(4)} (+1R) to eliminate risk.`;
+        ? `Move SL to break-even once price reaches ${(entry + atr).toFixed(4)} (+1R). This secures a risk-free trade.`
+        : `Move SL to break-even once price reaches ${(entry - atr).toFixed(4)} (+1R) to eliminate risk.`;
 
-    // Build pattern description
+    // === BUILD PATTERN DESCRIPTION ===
     let patternDescription = '';
     if (allPatterns.length > 0) {
         const patternNames = allPatterns.map(p => p.name).join(', ');
-        patternDescription = `Candlestick patterns detected: ${patternNames}. `;
+        patternDescription = `Candlestick patterns: ${patternNames}. `;
     }
-    patternDescription += `RSI: ${rsi.toFixed(1)} | EMA9: ${ema9.toFixed(4)} | EMA21: ${ema21.toFixed(4)}`;
+    patternDescription += `RSI: ${rsi.value.toFixed(1)} (${rsi.zone}) | MACD: ${macd.histogram > 0 ? 'Bullish' : 'Bearish'} | ADX: ${adx.value.toFixed(1)} (${adx.trending ? 'Trending' : 'Ranging'})`;
 
-    // Tailored setup logic
+    // === TAILORED SETUP ===
     let tailoredSetup = "";
     if (signal !== 'WAIT') {
-        const riskPerTrade = accountSize * 0.02; // 2% risk
+        const riskPerTrade = accountSize * 0.02;
         const priceDistance = Math.abs(entry - stopLoss);
 
         if (assetType === 'forex') {
             const lots = (riskPerTrade / (priceDistance * 100000)).toFixed(2);
-            tailoredSetup = `[LOCAL ENGINE] For your $${accountSize} balance, ${Math.max(0.01, lots)} lots recommended. ${detectedPattern} pattern detected with RSI at ${rsi.toFixed(0)}.`;
+            tailoredSetup = `[CONFLUENCE ENGINE] $${accountSize} account, ${Math.max(0.01, lots)} lots. Confluence Score: ${confluenceScore}/100. ${confluenceFactors.length} indicators aligned.`;
         } else {
             const units = (riskPerTrade / (priceDistance || 1)).toFixed(4);
-            tailoredSetup = `[LOCAL ENGINE] With $${accountSize}, use ~${units} units. ${detectedPattern} detected. RSI is ${rsi < 40 ? 'oversold' : rsi > 60 ? 'overbought' : 'neutral'} at ${rsi.toFixed(0)}.`;
+            tailoredSetup = `[CONFLUENCE ENGINE] $${accountSize} account, ~${units} units. Confluence Score: ${confluenceScore}/100. ${confluenceFactors.length} indicators aligned.`;
         }
     }
 
-    // Generate reasoning based on pattern
+    // === REASONING ===
     let reasoning = '';
     if (signal === 'BUY') {
-        reasoning = allPatterns.length > 0
-            ? `${detectedPattern} detected - Anti-gravity lift initiated at support zone.`
-            : 'Anti-gravity lift confirmed by technical thrusters.';
+        reasoning = confluenceScore >= 50
+            ? `Strong bullish confluence detected (${confluenceScore}/100). Multiple indicators aligned for anti-gravity lift.`
+            : `Bullish setup detected. ${detectedPattern} pattern with supporting indicators.`;
     } else if (signal === 'SELL') {
-        reasoning = allPatterns.length > 0
-            ? `${detectedPattern} detected - Gravity reclaiming control at resistance.`
-            : 'Gravity winning the battle, structural collapse detected.';
+        reasoning = confluenceScore >= 50
+            ? `Strong bearish confluence detected (${confluenceScore}/100). Multiple indicators aligned for gravitational pull.`
+            : `Bearish setup detected. ${detectedPattern} pattern with supporting indicators.`;
     } else {
-        reasoning = 'Quantum entanglement detected, waiting for breakthrough.';
+        reasoning = 'Quantum entanglement detected. Indicators not aligned - waiting for clearer setup.';
     }
+
+    // === WHY ENTER ===
+    const whyEnter = signal !== 'WAIT'
+        ? `Confluence Score: ${confluenceScore}/100. Aligned factors: ${confluenceFactors.slice(0, 5).join(', ')}. ${allPatterns.length > 0 ? `${detectedPattern} pattern detected.` : ''} RSI at ${rsi.value.toFixed(1)} (${rsi.zone}), MACD ${macd.histogram > 0 ? 'bullish' : 'bearish'} momentum, ${adx.trending ? 'trending market confirms direction' : 'ranging market - trade cautiously'}.`
+        : 'Indicators showing mixed signals. Waiting for confluence alignment.';
 
     return {
         signal,
         confidence,
-        mtcAlignment: allPatterns.length > 0
-            ? `Pattern-Based Analysis (${allPatterns.length} patterns detected)`
-            : 'Indicator Crossover (Single Timeframe Fallback)',
+        mtcAlignment: `Confluence Analysis (Score: ${confluenceScore}/100)`,
         newsSentiment: 'Neutral',
         newsImpact: 'News context unavailable in local engine mode.',
         currentPrice: last.close,
         pattern: detectedPattern,
         patternDescription,
-        detectedPatterns: allPatterns, // Include all detected patterns for UI
+        detectedPatterns: allPatterns,
         marketStructure: signal === 'BUY'
-            ? 'Ascending structure with positive momentum.'
+            ? `Bullish structure. ${adx.trending ? 'Strong uptrend' : 'Ranging with bullish bias'}.`
             : signal === 'SELL'
-                ? 'Descending structure with negative momentum.'
-                : 'Price hovering in a tight range.',
+                ? `Bearish structure. ${adx.trending ? 'Strong downtrend' : 'Ranging with bearish bias'}.`
+                : 'Price consolidating. Awaiting directional breakout.',
         entry: signal === 'WAIT' ? null : entry,
         stopLoss: signal === 'WAIT' ? null : stopLoss,
         takeProfit: signal === 'WAIT' ? null : takeProfit,
@@ -182,20 +147,32 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
         slRecommendation: signal === 'WAIT' ? "" : slRecommendation,
         riskRewardRatio: '1:2',
         keyLevels: {
-            resistance: [entry + atr, entry + (atr * 2)],
-            support: [entry - atr, entry - (atr * 2)]
+            resistance: [bollingerBands.upper, last.close + (atr * 2)],
+            support: [bollingerBands.lower, last.close - (atr * 2)]
         },
-        whyEnter: allPatterns.length > 0
-            ? `${detectedPattern} pattern identified. This structure suggests a powerful ${signal === 'BUY' ? 'upward' : 'downward'} propulsion. EMA${crossedUp || crossedDown ? ' crossover confirms direction.' : ' alignment neutral.'} RSI at ${rsi.toFixed(1)} confirms momentum.`
-            : `EMA indicators show ${signal === 'BUY' ? 'bullish' : 'bearish'} trajectory. RSI is at ${rsi.toFixed(1)}, showing ${signal === 'BUY' ? 'strength' : 'weakness'}. ATR volatility is ${atr.toFixed(4)}, providing optimal orbital window.`,
+        whyEnter,
         riskFactors: [
             'Local engine analysis (No Gemini AI)',
-            allPatterns.length > 0 ? 'Pattern-based signal' : 'Indicator-based signal',
-            'Watch for news-driven volatility'
+            `Confluence Score: ${confluenceScore}/100`,
+            adx.trending ? 'Trending market' : 'Ranging market - use caution',
+            volume.spike ? 'Volume spike detected' : 'Normal volume'
         ],
-        technicalNotes: `RSI: ${rsi.toFixed(1)} | ATR: ${atr.toFixed(4)} | Patterns: ${allPatterns.length}`,
+        technicalNotes: `RSI: ${rsi.value.toFixed(1)} | MACD: ${macd.value.toFixed(4)} | ADX: ${adx.value.toFixed(1)} | Stoch: ${stochastic.k.toFixed(1)}`,
         tailoredSetup,
         reasoning,
+        // NEW: Include full indicator data
+        indicators: {
+            rsi: { value: rsi.value, zone: rsi.zone, divergence: rsi.divergence },
+            macd: { value: macd.value, signal: macd.signal, histogram: macd.histogram, crossover: macd.crossover },
+            bollingerBands: { upper: bollingerBands.upper, middle: bollingerBands.middle, lower: bollingerBands.lower, squeeze: bollingerBands.squeeze, percentB: bollingerBands.percentB },
+            volume: { current: volume.current, average: volume.average, ratio: volume.ratio, spike: volume.spike },
+            adx: { value: adx.value, trending: adx.trending, direction: adx.direction },
+            stochastic: { k: stochastic.k, d: stochastic.d, zone: stochastic.zone, crossover: stochastic.crossover },
+            atr
+        },
+        confluenceScore,
+        confluenceBias,
+        confluenceFactors,
         timestamp: Date.now(),
         dataSource: 'technical'
     };

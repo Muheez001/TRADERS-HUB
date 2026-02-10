@@ -7,6 +7,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import dotenv from 'dotenv';
 import { searchDocuments, getStats } from './vectorStore.js';
 import { analyzeTechnicals } from './technicalAnalysis.js';
+import { calculateAllIndicators } from './indicators.js';
 
 dotenv.config();
 
@@ -21,6 +22,12 @@ if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here') {
     model = genAI.getGenerativeModel({ model: 'models/gemini-3-flash-preview' });
     console.log('✅ Gemini 3 Flash (Preview) initialized successfully');
 }
+
+// === ANALYSIS CACHE ===
+// Key: symbol:timeframe:assetType
+// Value: { data: result, timestamp: Date.now() }
+const analysisCache = new Map();
+const CACHE_DURATION = 15 * 60 * 1000; // 15 minutes cache
 
 /**
  * Analyze news headline and generate market impact opinion
@@ -155,13 +162,21 @@ function generateRuleBasedAnalysis(title, description) {
  * @param {number} accountSize - User's trading capital
  * @param {Array} news - Latest news headlines
  */
-export async function analyzeMarketStructure(symbol, currentInterval, candlesData, assetType = 'crypto', accountSize = 500, news = []) {
+export async function analyzeMarketStructure(symbol, currentInterval, candlesData, assetType = 'crypto', accountSize = 500, riskAmount = 50, targetGain = 100, news = []) {
     // Handle both legacy (Array) and MTC (Object) formats
     const isMTC = candlesData && candlesData.primary;
     const candles = isMTC ? candlesData.primary : candlesData;
     const secondary = isMTC ? candlesData.secondary : [];
     const tertiary = isMTC ? candlesData.tertiary : [];
     const mtcIntervals = isMTC ? candlesData.intervals : [currentInterval];
+
+    // === CACHE CHECK ===
+    const cacheKey = `${symbol}:${currentInterval}:${assetType}`;
+    const cached = analysisCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_DURATION)) {
+        console.log(`⚡ Returning CACHED analysis for ${symbol} (${currentInterval})`);
+        return cached.data;
+    }
 
     // Calculate key metrics from primary candles with guardrails
     if (!candles || candles.length === 0) {
@@ -201,6 +216,10 @@ export async function analyzeMarketStructure(symbol, currentInterval, candlesDat
         ? news.map((n, i) => `${i + 1}. ${n.title}`).join('\n')
         : "No recent news available.";
 
+    // === CALCULATE ALL TECHNICAL INDICATORS ===
+    const indicators = calculateAllIndicators(candles);
+    console.log(`📊 Indicators calculated: Confluence Score ${indicators.confluenceScore}/100, Bias: ${indicators.confluenceBias}`);
+
     if (!model) {
         return analyzeTechnicals(symbol, candles, assetType, accountSize);
     }
@@ -234,6 +253,8 @@ Your goal is MULTI-TIMEFRAME CONFLUENCE (MTC) analysis. Look for alignments acro
 
 ASSET: ${symbol} (${assetType.toUpperCase()})
 USER ACCOUNT SIZE: $${accountSize}
+USER MAX RISK TOLERANCE: $${riskAmount} per trade
+USER TARGET GAIN: $${targetGain} per trade
 
 === PRIMARY: ${mtcIntervals[0]} ===
 CURRENT PRICE: ${currentPrice.toFixed(4)}
@@ -250,13 +271,35 @@ ${newsContext}
 
 ${knowledgeContext}
 
+=== TECHNICAL INDICATORS (Pre-computed) ===
+RSI(14): ${indicators.rsi.value.toFixed(1)} | Zone: ${indicators.rsi.zone}${indicators.rsi.divergence ? ` | DIVERGENCE: ${indicators.rsi.divergence}` : ''}
+MACD: Line=${indicators.macd.value.toFixed(4)} | Signal=${indicators.macd.signal.toFixed(4)} | Histogram=${indicators.macd.histogram > 0 ? 'BULLISH' : 'BEARISH'}${indicators.macd.crossover ? ` | CROSSOVER: ${indicators.macd.crossover}` : ''}
+Bollinger Bands: Upper=${indicators.bollingerBands.upper.toFixed(4)} | Middle=${indicators.bollingerBands.middle.toFixed(4)} | Lower=${indicators.bollingerBands.lower.toFixed(4)}${indicators.bollingerBands.squeeze ? ' | SQUEEZE DETECTED' : ''} | %B=${(indicators.bollingerBands.percentB * 100).toFixed(1)}%
+Volume: Current=${indicators.volume.current.toFixed(0)} | Avg=${indicators.volume.average.toFixed(0)} | Ratio=${indicators.volume.ratio.toFixed(2)}x${indicators.volume.spike ? ' | VOLUME SPIKE' : ''}
+ADX(14): ${indicators.adx.value.toFixed(1)} | Market: ${indicators.adx.trending ? 'TRENDING' : 'RANGING'} | Direction: ${indicators.adx.direction}
+Stochastic(14,3,3): %K=${indicators.stochastic.k.toFixed(1)} | %D=${indicators.stochastic.d.toFixed(1)} | Zone: ${indicators.stochastic.zone}${indicators.stochastic.crossover ? ` | CROSSOVER: ${indicators.stochastic.crossover}` : ''}
+ATR(14): ${indicators.atr.toFixed(4)}
+EMA9: ${indicators.ema.ema9?.toFixed(4) || 'N/A'} | EMA21: ${indicators.ema.ema21?.toFixed(4) || 'N/A'}
+CONFLUENCE SCORE: ${indicators.confluenceScore}/100 | BIAS: ${indicators.confluenceBias.toUpperCase()}
+ALIGNED FACTORS: ${indicators.confluenceFactors.slice(0, 5).join(', ') || 'None'}
+
 Task description:
 1. Identify Market Structure across all timeframes. High timeframe (HTF) trend is DOMINANT.
 2. Look for "Quantum Alignment": If all timeframes point in the same direction, confidence is HIGH.
 3. Apply AxiTrader's "13 Pro Tips": Look for specific chart setups, volume clusters, and institutional footprints.
 4. Utilize "Hat-Trick" Strategies: If a Hat-Trick setup (e.g., 3-candle confirmation, specific RSI/Price divergence) is detected, prioritize it.
+5. **CRITICAL: Use the pre-computed TECHNICAL INDICATORS above** - They provide confluence confirmation:
+   - RSI oversold (<30) or overbought (>70) signals momentum extremes
+   - MACD crossovers and histogram direction confirm momentum
+   - Bollinger Band squeeze indicates imminent breakout
+   - Volume spike confirms price action validity  
+   - ADX > 25 = trending market (trade with trend), ADX < 20 = ranging (avoid trend trades)
+   - Stochastic crossovers in extreme zones are reversal signals
+   - Use the PRE-COMPUTED CONFLUENCE SCORE to weight your confidence
 5. Evaluate News Impact: Does the news support or conflict with technicals?
-6. Provide a TAILORED TRADE SETUP for $${accountSize}.
+6. Provide a TAILORED TRADE SETUP for a $${accountSize} account, strictly respecting the $${riskAmount} max risk cap.
+   - ENSURE the Stop Loss distance aligns with this risk.
+   - For Forex (including BTC-USD), assume standard lot mechanics tailored to fit the risk.
 7. Categorize the signal: BUY, SELL, or WAIT.
 
 Return STRICT JSON:
@@ -279,7 +322,7 @@ Return STRICT JSON:
   "keyLevels": { "resistance": [], "support": [] },
   "whyEnter": "Detailed reasoning based on Confluence, Candles, and News",
   "riskFactors": ["List of risk factors"],
-  "tailoredSetup": "Specific instruction for $${accountSize}",
+  "tailoredSetup": "Specific instruction for user's $${accountSize} account with $${riskAmount} risk budget",
   "reasoning": "Anti-gravity/levitation metaphor summary"
 }
 
@@ -300,15 +343,37 @@ RULES:
         const cleanText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
         const analysis = JSON.parse(cleanText);
 
-        return {
+        const finalResult = {
             ...analysis,
             currentPrice,
             highestHigh,
             lowestLow,
             avgVolume,
+            // Include computed indicators for frontend
+            indicators: {
+                rsi: indicators.rsi,
+                macd: indicators.macd,
+                bollingerBands: indicators.bollingerBands,
+                volume: indicators.volume,
+                adx: indicators.adx,
+                stochastic: indicators.stochastic,
+                atr: indicators.atr,
+                ema: indicators.ema
+            },
+            confluenceScore: indicators.confluenceScore,
+            confluenceBias: indicators.confluenceBias,
+            confluenceFactors: indicators.confluenceFactors,
             timestamp: Date.now(),
             dataSource: 'live'
         };
+
+        // Cache the result
+        analysisCache.set(`${symbol}:${currentInterval}:${assetType}`, {
+            data: finalResult,
+            timestamp: Date.now()
+        });
+
+        return finalResult;
 
     } catch (error) {
         console.error(`❌ Gemini Error for ${symbol}:`, error.message);

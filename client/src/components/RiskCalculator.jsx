@@ -26,6 +26,8 @@ const PIP_VALUES = {
     // Metals
     'XAU-USD': { pipSize: 0.01, pipCost: 1 },  // Gold - 1 pip = $1 per 1oz
     'XAG-USD': { pipSize: 0.001, pipCost: 50 }, // Silver
+    // Crypto Forex
+    'BTC-USD': { pipSize: 0.01, pipCost: 0.01 }, // 1 Lot = 1 BTC. $1 move = 100 pips * 0.01 cost = $1.
     // Default fallback
     'DEFAULT': { pipSize: 0.0001, pipCost: 10 }
 };

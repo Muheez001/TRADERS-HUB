@@ -16,7 +16,9 @@ const FOREX_PAIRS = [
     // Commodities / Metals
     'XAU-USD', 'XAG-USD',  // Gold, Silver
     // Exotic
-    'USD-ZAR', 'USD-MXN', 'EUR-TRY'
+    'USD-ZAR', 'USD-MXN', 'EUR-TRY',
+    // Crypto Forex
+    'BTC-USD'
 ];
 const TIMEFRAMES = ['15m', '30m', '1h', '4h'];
 
@@ -31,11 +33,21 @@ const AIInsights = () => {
         const saved = localStorage.getItem('tradingCapital');
         return saved ? parseFloat(saved) : 500;
     });
+    const [riskAmount, setRiskAmount] = useState(() => {
+        const saved = localStorage.getItem('tradingRiskAmount');
+        return saved ? parseFloat(saved) : 50;
+    });
+    const [targetGain, setTargetGain] = useState(() => {
+        const saved = localStorage.getItem('tradingTargetGain');
+        return saved ? parseFloat(saved) : 100;
+    });
 
-    // Sync accountSize with localStorage
+    // Sync state with localStorage
     useEffect(() => {
         localStorage.setItem('tradingCapital', accountSize.toString());
-    }, [accountSize]);
+        localStorage.setItem('tradingRiskAmount', riskAmount.toString());
+        localStorage.setItem('tradingTargetGain', targetGain.toString());
+    }, [accountSize, riskAmount, targetGain]);
 
     // Paper Trading State
     const [paperTrades, setPaperTrades] = useState(() => {
@@ -114,7 +126,7 @@ const AIInsights = () => {
         setLoading(true);
         setError(null);
         try {
-            const url = `http://localhost:3001/api/insights/${selectedAsset}/${selectedTimeframe}?type=${assetType}&accountSize=${accountSize}`;
+            const url = `http://localhost:3001/api/insights/${selectedAsset}/${selectedTimeframe}?type=${assetType}&accountSize=${accountSize}&riskAmount=${riskAmount}&targetGain=${targetGain}`;
             console.log('Fetching:', url);
             const response = await fetch(url);
             const result = await response.json();
@@ -220,16 +232,73 @@ const AIInsights = () => {
                     <div className="flex items-center gap-6 px-4">
                         {/* Capital Config */}
                         <div className="flex items-center gap-4 border-l border-white/10 pl-6 h-8">
-                            <span className="hud-label">Capital Input</span>
-                            <div className="flex items-center bg-white/5 border border-white/5 rounded-lg px-3 py-1">
-                                <span className="text-dim text-[10px] mr-2">$</span>
-                                <input
-                                    type="number"
-                                    value={accountSize}
-                                    onChange={(e) => setAccountSize(Math.max(0, parseFloat(e.target.value) || 0))}
-                                    className="bg-transparent text-white font-mono text-xs w-20 focus:outline-none text-right"
-                                />
+
+                            {/* Trading Account (Capital) */}
+                            <div className="flex flex-col gap-0.5 group relative">
+                                <div className="flex items-center gap-1 cursor-help hover:text-white transition-colors duration-200">
+                                    <span className="hud-label group-hover:text-white">Trading Account</span>
+                                    <Info className="w-3 h-3 text-dim group-hover:text-purple-400 transition-colors" />
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-[10px] text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                                        <span className="font-semibold text-white block mb-1">💰 Your Total Capital</span>
+                                        The total amount in your trading account. Position sizes will be calculated based on this.
+                                    </div>
+                                </div>
+                                <div className="flex items-center bg-white/5 border border-white/5 rounded-lg px-2 py-0.5 group-hover:border-purple-500/30 transition-colors">
+                                    <span className="text-dim text-[10px] mr-1">$</span>
+                                    <input
+                                        type="number"
+                                        value={accountSize}
+                                        onChange={(e) => setAccountSize(Math.max(0, parseFloat(e.target.value) || 0))}
+                                        className="bg-transparent text-white font-mono text-[10px] w-16 focus:outline-none text-right"
+                                        placeholder="1000"
+                                    />
+                                </div>
                             </div>
+
+                            {/* Risk Per Trade */}
+                            <div className="flex flex-col gap-0.5 group relative">
+                                <div className="flex items-center gap-1 cursor-help hover:text-white transition-colors duration-200">
+                                    <span className="hud-label group-hover:text-white">Risk Per Trade</span>
+                                    <Info className="w-3 h-3 text-dim group-hover:text-red-400 transition-colors" />
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 p-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-[10px] text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                                        <span className="font-semibold text-red-400 block mb-1">⚠️ Max Loss Per Trade</span>
+                                        The maximum amount you're willing to lose if the trade hits your stop loss. Pros risk 1-2% of capital per trade.
+                                    </div>
+                                </div>
+                                <div className="flex items-center bg-white/5 border border-red-500/20 rounded-lg px-2 py-0.5 group-hover:border-red-500/40 transition-colors">
+                                    <span className="text-dim text-[10px] mr-1">$</span>
+                                    <input
+                                        type="number"
+                                        value={riskAmount}
+                                        onChange={(e) => setRiskAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                                        className="bg-transparent font-mono text-[10px] w-12 focus:outline-none text-right text-red-400"
+                                        placeholder="20"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Target Profit */}
+                            <div className="flex flex-col gap-0.5 group relative">
+                                <div className="flex items-center gap-1 cursor-help hover:text-white transition-colors duration-200">
+                                    <span className="hud-label group-hover:text-white">Target Profit</span>
+                                    <Info className="w-3 h-3 text-dim group-hover:text-emerald-400 transition-colors" />
+                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 p-2 bg-[#1a1a2e] border border-white/10 rounded-lg text-[10px] text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-xl">
+                                        <span className="font-semibold text-emerald-400 block mb-1">🎯 Your Profit Goal</span>
+                                        The amount you want to make on this trade. Aim for at least 2x your risk (e.g., risk $20 to make $40).
+                                    </div>
+                                </div>
+                                <div className="flex items-center bg-white/5 border border-emerald-500/20 rounded-lg px-2 py-0.5 group-hover:border-emerald-500/40 transition-colors">
+                                    <span className="text-dim text-[10px] mr-1">$</span>
+                                    <input
+                                        type="number"
+                                        value={targetGain}
+                                        onChange={(e) => setTargetGain(Math.max(0, parseFloat(e.target.value) || 0))}
+                                        className="bg-transparent font-mono text-[10px] w-12 focus:outline-none text-right text-emerald-400"
+                                        placeholder="40"
+                                    />
+                                </div>
+                            </div>
+
                         </div>
 
                         <button
@@ -295,6 +364,7 @@ const AIInsights = () => {
                                 <div className="flex border-b border-white/5 bg-white/[0.01]">
                                     {[
                                         { id: 'STRUCTURE', label: 'Market Structure', icon: Layers },
+                                        { id: 'INDICATORS', label: 'Indicators', icon: Activity },
                                         { id: 'LOGIC', label: 'Strategy Logic', icon: Sparkles },
                                         { id: 'OPERATIONS', label: 'Operations', icon: Trophy },
                                         { id: 'HISTORY', label: 'Signals', icon: History }
@@ -364,6 +434,201 @@ const AIInsights = () => {
                                                             </div>
                                                         ))}
                                                     </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeSubTab === 'INDICATORS' && (
+                                        <div className="space-y-6">
+                                            {/* Confluence Score Hero */}
+                                            <div className={`p-6 rounded-2xl border relative overflow-hidden ${(data.analysis.confluenceScore || 0) >= 60
+                                                ? 'bg-emerald-500/5 border-emerald-500/20'
+                                                : (data.analysis.confluenceScore || 0) >= 40
+                                                    ? 'bg-yellow-500/5 border-yellow-500/20'
+                                                    : 'bg-white/[0.02] border-white/5'
+                                                }`}>
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div>
+                                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest block mb-1">Confluence Score</span>
+                                                        <div className="flex items-baseline gap-2">
+                                                            <span className={`text-5xl font-black ${(data.analysis.confluenceScore || 0) >= 60 ? 'text-emerald-400' :
+                                                                (data.analysis.confluenceScore || 0) >= 40 ? 'text-yellow-400' : 'text-dim'
+                                                                }`}>
+                                                                {data.analysis.confluenceScore || 0}
+                                                            </span>
+                                                            <span className="text-xl text-dim">/100</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest ${data.analysis.confluenceBias === 'bullish' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                        data.analysis.confluenceBias === 'bearish' ? 'bg-red-500/20 text-red-400' :
+                                                            'bg-white/10 text-dim'
+                                                        }`}>
+                                                        {data.analysis.confluenceBias || 'Neutral'} Bias
+                                                    </div>
+                                                </div>
+                                                <div className="h-2 bg-white/5 rounded-full overflow-hidden mb-4">
+                                                    <motion.div
+                                                        initial={{ width: 0 }}
+                                                        animate={{ width: `${data.analysis.confluenceScore || 0}%` }}
+                                                        className={`h-full ${(data.analysis.confluenceScore || 0) >= 60 ? 'bg-emerald-500' :
+                                                            (data.analysis.confluenceScore || 0) >= 40 ? 'bg-yellow-500' : 'bg-white/30'
+                                                            }`}
+                                                    />
+                                                </div>
+                                                {/* Confluence Factors */}
+                                                {data.analysis.confluenceFactors?.length > 0 && (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {data.analysis.confluenceFactors.slice(0, 6).map((factor, i) => (
+                                                            <span key={i} className="px-2 py-1 bg-white/5 border border-white/5 rounded text-[9px] text-dim">
+                                                                {factor}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Indicator Grid */}
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                                {/* RSI */}
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest">RSI (14)</span>
+                                                        <span className={`text-[9px] px-2 py-0.5 rounded ${data.analysis.indicators?.rsi?.zone === 'oversold' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                            data.analysis.indicators?.rsi?.zone === 'overbought' ? 'bg-red-500/20 text-red-400' :
+                                                                'bg-white/10 text-dim'
+                                                            }`}>
+                                                            {data.analysis.indicators?.rsi?.zone || 'neutral'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-2xl font-mono font-bold text-white">
+                                                        {data.analysis.indicators?.rsi?.value?.toFixed(1) || '--'}
+                                                    </div>
+                                                    {data.analysis.indicators?.rsi?.divergence && (
+                                                        <span className={`text-[9px] ${data.analysis.indicators.rsi.divergence === 'bullish' ? 'text-emerald-400' : 'text-red-400'
+                                                            }`}>
+                                                            {data.analysis.indicators.rsi.divergence} divergence
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* MACD */}
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest">MACD</span>
+                                                        <span className={`text-[9px] px-2 py-0.5 rounded ${data.analysis.indicators?.macd?.histogram > 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                                                            }`}>
+                                                            {data.analysis.indicators?.macd?.histogram > 0 ? 'Bullish' : 'Bearish'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-lg font-mono font-bold text-white">
+                                                        {data.analysis.indicators?.macd?.histogram?.toFixed(4) || '--'}
+                                                    </div>
+                                                    {data.analysis.indicators?.macd?.crossover && (
+                                                        <span className={`text-[9px] ${data.analysis.indicators.macd.crossover === 'bullish' ? 'text-emerald-400' : 'text-red-400'
+                                                            }`}>
+                                                            {data.analysis.indicators.macd.crossover} crossover
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* ADX */}
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest">ADX (14)</span>
+                                                        <span className={`text-[9px] px-2 py-0.5 rounded ${data.analysis.indicators?.adx?.trending ? 'bg-purple-500/20 text-purple-400' : 'bg-white/10 text-dim'
+                                                            }`}>
+                                                            {data.analysis.indicators?.adx?.trending ? 'Trending' : 'Ranging'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-2xl font-mono font-bold text-white">
+                                                        {data.analysis.indicators?.adx?.value?.toFixed(1) || '--'}
+                                                    </div>
+                                                    <span className="text-[9px] text-dim">
+                                                        {data.analysis.indicators?.adx?.direction || 'neutral'} direction
+                                                    </span>
+                                                </div>
+
+                                                {/* Stochastic */}
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest">Stochastic</span>
+                                                        <span className={`text-[9px] px-2 py-0.5 rounded ${data.analysis.indicators?.stochastic?.zone === 'oversold' ? 'bg-emerald-500/20 text-emerald-400' :
+                                                            data.analysis.indicators?.stochastic?.zone === 'overbought' ? 'bg-red-500/20 text-red-400' :
+                                                                'bg-white/10 text-dim'
+                                                            }`}>
+                                                            {data.analysis.indicators?.stochastic?.zone || 'neutral'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex gap-3">
+                                                        <div>
+                                                            <span className="text-[9px] text-dim">%K</span>
+                                                            <div className="text-lg font-mono font-bold text-white">
+                                                                {data.analysis.indicators?.stochastic?.k?.toFixed(1) || '--'}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[9px] text-dim">%D</span>
+                                                            <div className="text-lg font-mono font-bold text-white">
+                                                                {data.analysis.indicators?.stochastic?.d?.toFixed(1) || '--'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Volume */}
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest">Volume</span>
+                                                        {data.analysis.indicators?.volume?.spike && (
+                                                            <span className="text-[9px] px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                                                                SPIKE
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-2xl font-mono font-bold text-white">
+                                                        {data.analysis.indicators?.volume?.ratio?.toFixed(2) || '1.00'}x
+                                                    </div>
+                                                    <span className="text-[9px] text-dim">vs avg volume</span>
+                                                </div>
+
+                                                {/* Bollinger Bands */}
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <span className="text-[10px] text-dim font-black uppercase tracking-widest">Bollinger</span>
+                                                        {data.analysis.indicators?.bollingerBands?.squeeze && (
+                                                            <span className="text-[9px] px-2 py-0.5 rounded bg-orange-500/20 text-orange-400">
+                                                                SQUEEZE
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-lg font-mono font-bold text-white">
+                                                        {((data.analysis.indicators?.bollingerBands?.percentB || 0.5) * 100).toFixed(0)}% B
+                                                    </div>
+                                                    <div className="text-[9px] text-dim space-y-0.5 mt-1">
+                                                        <div>Upper: {data.analysis.indicators?.bollingerBands?.upper?.toFixed(2) || '--'}</div>
+                                                        <div>Lower: {data.analysis.indicators?.bollingerBands?.lower?.toFixed(2) || '--'}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* ATR & EMA Row */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <span className="text-[10px] text-dim font-black uppercase tracking-widest block mb-1">ATR (14)</span>
+                                                    <div className="text-xl font-mono font-bold text-white">
+                                                        {data.analysis.indicators?.atr?.toFixed(4) || '--'}
+                                                    </div>
+                                                    <span className="text-[9px] text-dim">Volatility measure</span>
+                                                </div>
+                                                <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl">
+                                                    <span className="text-[10px] text-dim font-black uppercase tracking-widest block mb-1">EMA Trend</span>
+                                                    <div className={`text-xl font-mono font-bold ${(data.analysis.indicators?.ema?.ema9 || 0) > (data.analysis.indicators?.ema?.ema21 || 0)
+                                                        ? 'text-emerald-400' : 'text-red-400'
+                                                        }`}>
+                                                        {(data.analysis.indicators?.ema?.ema9 || 0) > (data.analysis.indicators?.ema?.ema21 || 0) ? 'Bullish' : 'Bearish'}
+                                                    </div>
+                                                    <span className="text-[9px] text-dim">EMA9 vs EMA21</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -668,6 +933,8 @@ const AIInsights = () => {
                                 assetType={assetType}
                                 currentPrice={data.analysis.currentPrice}
                                 signal={data.analysis.signal}
+                                userRiskAmount={riskAmount}
+                                userTargetGain={targetGain}
                             />
                         </div>
                     </div>
