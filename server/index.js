@@ -207,7 +207,7 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
         );
 
         // === PHASE 1 IMPROVEMENTS ===
-        const MIN_CONFIDENCE = 70; // Only accept high-confidence signals
+        const MIN_CONFIDENCE = 60; // Accept moderately-confident signals
 
         // 1. Check for consecutive losses (pause if 3+ in a row)
         const pauseCheck = await shouldPauseTrading(3);
@@ -253,6 +253,201 @@ app.get('/api/insights/:symbol/:timeframe', async (req, res) => {
     } catch (error) {
         console.error('Insights Error:', error.message);
         res.status(500).json({ success: false, message: 'Failed to generate insights' });
+    }
+});
+
+// ==========================================
+// HIGH CONFLUENCE SCANNER
+// ==========================================
+const SCANNER_COOLDOWN = 5 * 60 * 1000; // 5 minutes between scans
+let lastScanTimestamp = 0;
+
+const SCANNER_WATCHLIST = {
+    crypto: ['BTC', 'ETH', 'SOL', 'XRP'],
+    forex: ['EUR-USD', 'GBP-USD', 'XAU-USD', 'USD-JPY']
+};
+
+const FULL_WATCHLIST = {
+    crypto: ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'BNB', 'AVAX', 'LINK', 'DOT'],
+    forex: [
+        'EUR-USD', 'GBP-USD', 'USD-JPY', 'USD-CHF', 'AUD-USD', 'USD-CAD', 'NZD-USD',
+        'EUR-GBP', 'EUR-JPY', 'GBP-JPY', 'AUD-JPY', 'EUR-AUD',
+        'XAU-USD', 'XAG-USD',
+        'USD-ZAR', 'USD-MXN', 'EUR-TRY',
+        'BTC-USD'
+    ]
+};
+
+const HIGH_CONFLUENCE_MIN = 65; // Minimum confidence threshold
+
+/**
+ * High Confluence Scanner
+ * POST /api/scanner/high-confluence
+ * Body: { timeframe, accountSize, riskAmount, targetGain, fullScan }
+ */
+app.post('/api/scanner/high-confluence', async (req, res) => {
+    try {
+        const now = Date.now();
+        const timeSinceLastScan = now - lastScanTimestamp;
+
+        // Enforce cooldown
+        if (timeSinceLastScan < SCANNER_COOLDOWN && lastScanTimestamp > 0) {
+            const remainingMs = SCANNER_COOLDOWN - timeSinceLastScan;
+            return res.status(429).json({
+                success: false,
+                message: 'Scanner on cooldown',
+                cooldownRemaining: remainingMs,
+                nextScanAvailable: new Date(lastScanTimestamp + SCANNER_COOLDOWN).toISOString()
+            });
+        }
+
+        const {
+            timeframe = '4h',
+            accountSize = 500,
+            riskAmount = 50,
+            targetGain = 100,
+            fullScan = false
+        } = req.body;
+
+        // Build combined watchlist
+        const cryptoList = fullScan ? FULL_WATCHLIST.crypto : SCANNER_WATCHLIST.crypto;
+        const forexList = fullScan ? FULL_WATCHLIST.forex : SCANNER_WATCHLIST.forex;
+        const watchlist = [
+            ...cryptoList.map(s => ({ symbol: s, assetType: 'crypto' })),
+            ...forexList.map(s => ({ symbol: s, assetType: 'forex' }))
+        ];
+
+        console.log(`\n🔍 ═══════════════════════════════════════`);
+        console.log(`🔍 HIGH CONFLUENCE SCANNER INITIATED`);
+        console.log(`🔍 Scanning ${watchlist.length} pairs on ${timeframe}...`);
+        console.log(`🔍 ═══════════════════════════════════════\n`);
+
+        lastScanTimestamp = now;
+        const startTime = Date.now();
+        const qualifyingSetups = [];
+        let scannedCount = 0;
+
+        // Define MTC Timeframes
+        const intervals = {
+            '15m': ['15m', '1h', '4h'],
+            '30m': ['30m', '1h', '4h'],
+            '1h': ['1h', '4h', '1d'],
+            '4h': ['4h', '1d', '1w'],
+            '1d': ['1d', '1w', '1M']
+        };
+        const activeIntervals = intervals[timeframe] || [timeframe, '1h', '4h'];
+
+        // Fetch news once for all scans
+        const news = await fetchNews();
+        const relevantNews = news.slice(0, 5);
+
+        // Scan each pair SEQUENTIALLY to avoid overwhelming APIs
+        for (const item of watchlist) {
+            scannedCount++;
+            const { symbol, assetType } = item;
+
+            try {
+                console.log(`  📡 [${scannedCount}/${watchlist.length}] Scanning ${symbol} (${assetType})...`);
+
+                let candles, secondaryCandles, tertiaryCandles;
+                let cleanSymbol = symbol;
+
+                if (assetType === 'forex') {
+                    cleanSymbol = symbol.replace('-', '/').toUpperCase();
+                    if (!cleanSymbol.includes('/') && cleanSymbol.length === 6) {
+                        cleanSymbol = cleanSymbol.slice(0, 3) + '/' + cleanSymbol.slice(3);
+                    }
+                    if (symbol === 'BTC-USD') cleanSymbol = 'BTC/USD';
+                    [candles, secondaryCandles, tertiaryCandles] = await Promise.all([
+                        fetchForexCandles(cleanSymbol, activeIntervals[0]),
+                        fetchForexCandles(cleanSymbol, activeIntervals[1]),
+                        fetchForexCandles(cleanSymbol, activeIntervals[2])
+                    ]);
+                } else {
+                    cleanSymbol = symbol.toUpperCase();
+                    [candles, secondaryCandles, tertiaryCandles] = await Promise.all([
+                        fetchCandles(cleanSymbol, activeIntervals[0]),
+                        fetchCandles(cleanSymbol, activeIntervals[1]),
+                        fetchCandles(cleanSymbol, activeIntervals[2])
+                    ]);
+                }
+
+                // Run AI analysis
+                const analysis = await analyzeMarketStructure(
+                    cleanSymbol,
+                    timeframe,
+                    {
+                        primary: candles,
+                        secondary: secondaryCandles,
+                        tertiary: tertiaryCandles,
+                        intervals: activeIntervals
+                    },
+                    assetType,
+                    accountSize,
+                    riskAmount,
+                    targetGain,
+                    relevantNews
+                );
+
+                // Only keep high-confluence setups
+                const hasSetup = analysis && analysis.status === 'setup' && analysis.confidence >= HIGH_CONFLUENCE_MIN;
+                const hasLegacySignal = analysis && analysis.signal && analysis.signal !== 'WAIT' && analysis.confidence >= HIGH_CONFLUENCE_MIN && analysis.status !== 'no_setup';
+
+                if (hasSetup || hasLegacySignal) {
+                    const signal = analysis.direction ? (analysis.direction === 'Long' ? 'BUY' : 'SELL') : analysis.signal;
+                    console.log(`  ✅ ${symbol}: ${signal} @ ${analysis.confidence}% confidence — QUALIFYING!`);
+                    qualifyingSetups.push({
+                        symbol: cleanSymbol,
+                        displaySymbol: symbol,
+                        assetType,
+                        timeframe,
+                        signal,
+                        confidence: analysis.confidence,
+                        entry: analysis.entry,
+                        stopLoss: analysis.stop_loss || analysis.stopLoss,
+                        takeProfit: analysis.take_profit || analysis.takeProfit,
+                        riskRewardRatio: analysis.rr_ratio || analysis.riskRewardRatio,
+                        rationale: analysis.rationale,
+                        confluenceFactors: analysis.confluence_factors || analysis.confluenceFactors || [],
+                        direction: analysis.direction,
+                        positionSize: analysis.position_size || analysis.positionSize,
+                        dollarRisk: analysis.dollar_risk || analysis.dollarRisk,
+                        dataSource: analysis.dataSource
+                    });
+                } else {
+                    const reason = analysis?.status === 'no_setup' ? 'No setup' :
+                        analysis?.signal === 'WAIT' ? 'WAIT signal' :
+                            `${analysis?.confidence || 0}% (below ${HIGH_CONFLUENCE_MIN}%)`;
+                    console.log(`  ⏭️  ${symbol}: Skipped — ${reason}`);
+                }
+            } catch (scanError) {
+                console.error(`  ❌ ${symbol}: Scan failed — ${scanError.message}`);
+            }
+        }
+
+        // Sort by confidence (highest first)
+        qualifyingSetups.sort((a, b) => b.confidence - a.confidence);
+
+        const scanDuration = Math.round((Date.now() - startTime) / 1000);
+
+        console.log(`\n🔍 ═══════════════════════════════════════`);
+        console.log(`🔍 SCAN COMPLETE: ${qualifyingSetups.length}/${scannedCount} setups qualify (≥${HIGH_CONFLUENCE_MIN}%)`);
+        console.log(`🔍 Duration: ${scanDuration}s`);
+        console.log(`🔍 ═══════════════════════════════════════\n`);
+
+        res.json({
+            success: true,
+            data: {
+                scannedCount,
+                qualifyingSetups,
+                scanDuration: `${scanDuration}s`,
+                nextScanAvailable: new Date(now + SCANNER_COOLDOWN).toISOString(),
+                threshold: HIGH_CONFLUENCE_MIN
+            }
+        });
+    } catch (error) {
+        console.error('Scanner Error:', error.message);
+        res.status(500).json({ success: false, message: 'Scanner failed: ' + error.message });
     }
 });
 
