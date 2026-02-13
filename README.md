@@ -4,21 +4,22 @@
 > An AI-powered trading terminal featuring RAG-enhanced technical analysis, real-time multi-asset tracking, and automated signal intelligence.
 
 ![GitHub last commit](https://img.shields.io/github/last-commit/Muheez001/TRADERS-HUB)
-![Version](https://img.shields.io/badge/version-2.1.0-blueviolet)
+![Version](https://img.shields.io/badge/version-2.2.0-blueviolet)
 ![Tech Stack](https://img.shields.io/badge/stack-MERN+%20Supabase+%20Resend-61DAFB)
 
 ---
 
-## 🔥 Latest Updates (Phase 2 Evolution)
+## 🔥 Latest Updates (Phase 3: Institutional Intelligence)
 
 Recently upgraded with enterprise-grade features for a professional trading workflow:
 
+*   **⚡ High Confluence Scanner:** New backend engine that scans multiple assets across Crypto, Forex, and Commodities for setups with **78%+ confidence scores**.
+*   **🏛️ Institutional AI Analyst:** Re-engineered prompt system enforcing strict risk-to-reward ratios and professional market structure analysis.
+*   **🎯 Increased Signal Frequency:** Tuned AI logic to minimize "no_setup" states while maintaining high quality through sophisticated pattern identification.
+*   **📊 Unified Scanner HUD:** Real-time progress tracking for background scans with instant high-probability trade delivery.
 *   **🔐 Secure Google Auth:** Seamless sign-in and session restoration via Supabase Auth.
-*   **📡 Automated 4H Scanner:** High-precision market scanner optimized for 4-hour cycles (12AM, 4AM, 8AM...) to capture institutional trends.
+*   **📡 Automated 4H Scanner:** High-precision market scanner optimized for 4-hour cycles capture institutional trends.
 *   **📧 Email Signal Alerts:** Instant trade notifications delivered to your inbox via Resend integration.
-*   **🔔 Interactive Notification Center:** Real-time signal toasts with expandable trade details (SL/TP/Entry) and direct AI analysis links.
-*   **🛡️ Advanced Risk HUD:** Improved capital management with tooltips and precise dollar-value risk calculations.
-*   **🧠 RAG-Enhanced Insights:** AI now references "The Candlestick Trading Bible" for professional-grade setups.
 
 ---
 
