@@ -106,11 +106,14 @@ Recently upgraded with enterprise-grade features for a professional trading work
 
 ---
 
-## 👤 Author
+## 👤 Authors
 
 **Muheez Muftau**
 - GitHub: [@Muheez001](https://github.com/Muheez001)
 - Email: muftaumuheez6@gmail.com
+
+**Barnabas Oboh (Aka Banny)**
+- Email: bannyzinnovate@gmail.com
 
 ---
 
