@@ -434,11 +434,72 @@ export function calculateAllIndicators(data) {
     const atr = calculateATR(data, 14);
     const ema9 = calculateEMA(data?.slice(-9) || [], 9);
     const ema21 = calculateEMA(data?.slice(-21) || [], 21);
+    const ema200 = calculateEMA(data?.slice(-200) || [], 200);
+    const mfi = calculateMFI(data, 14);
+    const ms = detectMarketStructure(data);
+    const orderBlocks = detectOrderBlocks(data);
+    const fvg = detectFVG(data);
+    const sweeps = detectLiquiditySweeps(data);
 
     // Calculate confluence
     const confluenceFactors = [];
     let bullishPoints = 0;
     let bearishPoints = 0;
+
+    // Market Structure (SMC)
+    if (ms.lastEvent) {
+        confluenceFactors.push(`Market Structure: ${ms.lastEvent} (${ms.trend})`);
+        if (ms.trend === 'bullish') bullishPoints += 20;
+        else if (ms.trend === 'bearish') bearishPoints += 20;
+    }
+
+    // Liquidity Sweeps
+    if (sweeps.length > 0) {
+        const lastSweep = sweeps[sweeps.length - 1];
+        confluenceFactors.push(`Liquidity Sweep: ${lastSweep.type}`);
+        if (lastSweep.type === 'bullish_reversal') bullishPoints += 25;
+        else if (lastSweep.type === 'bearish_reversal') bearishPoints += 25;
+    }
+
+    // Trend filter (Adam Khoo)
+    if (ema200 && data.length > 0) {
+        const currentPrice = data[data.length - 1].close;
+        if (currentPrice > ema200) {
+            confluenceFactors.push('Above 200 EMA (Long-term Bullish)');
+            bullishPoints += 10;
+        } else {
+            confluenceFactors.push('Below 200 EMA (Long-term Bearish)');
+            bearishPoints += 10;
+        }
+    }
+
+    // MFI signals (Trade Confident / Whale activity)
+    if (mfi) {
+        if (mfi.value < 20) {
+            confluenceFactors.push('MFI oversold (Whale accumulation?)');
+            bullishPoints += 15;
+        } else if (mfi.value > 80) {
+            confluenceFactors.push('MFI overbought (Whale distribution?)');
+            bearishPoints += 15;
+        }
+    }
+
+    // SMC signals
+    if (fvg.length > 0) {
+        const lastFVG = fvg[fvg.length - 1];
+        confluenceFactors.push(`Fair Value Gap detected (${lastFVG.type})`);
+        if (lastFVG.type === 'bullish') bullishPoints += 10;
+        else bearishPoints += 10;
+    }
+
+    if (orderBlocks.bullish.length > 0) {
+        confluenceFactors.push('Bullish Order Block detected');
+        bullishPoints += 15;
+    }
+    if (orderBlocks.bearish.length > 0) {
+        confluenceFactors.push('Bearish Order Block detected');
+        bearishPoints += 15;
+    }
 
     // RSI signals
     if (rsi.zone === 'oversold') {
@@ -539,9 +600,227 @@ export function calculateAllIndicators(data) {
         adx,
         stochastic,
         atr,
-        ema: { ema9, ema21 },
+        ema: { ema9, ema21, ema200 },
+        mfi,
+        orderBlocks,
+        fvg,
+        marketStructure: ms,
+        liquiditySweeps: sweeps,
         confluenceScore,
         confluenceBias,
         confluenceFactors
     };
+}
+
+/**
+ * Calculate Money Flow Index (MFI) - Uses Volume and Price
+ * @param {Array} data - Array of candles
+ * @param {number} period - default 14
+ */
+export function calculateMFI(data, period = 14) {
+    if (!data || data.length <= period) return { value: 50 };
+
+    let posMoneyFlow = 0;
+    let negMoneyFlow = 0;
+
+    for (let i = data.length - period; i < data.length; i++) {
+        const current = data[i];
+        const prev = data[i - 1];
+        
+        const typicalPrice = (current.high + current.low + current.close) / 3;
+        const prevTypicalPrice = (prev.high + prev.low + prev.close) / 3;
+        const moneyFlow = typicalPrice * current.volume;
+
+        if (typicalPrice > prevTypicalPrice) posMoneyFlow += moneyFlow;
+        else if (typicalPrice < prevTypicalPrice) negMoneyFlow += moneyFlow;
+    }
+
+    if (negMoneyFlow === 0) return { value: 100 };
+    const moneyRatio = posMoneyFlow / negMoneyFlow;
+    const mfi = 100 - (100 / (1 + moneyRatio));
+
+    return { value: mfi };
+}
+
+/**
+ * Detect Fair Value Gaps (FVG) / Imbalances (SMC Concept)
+ */
+export function detectFVG(data) {
+    if (!data || data.length < 3) return [];
+    const fvgs = [];
+    
+    // Check last 20 candles for gaps
+    for (let i = data.length - 20; i < data.length - 1; i++) {
+        if (i < 1) continue;
+        const c1 = data[i - 1];
+        const c2 = data[i];
+        const c3 = data[i + 1];
+
+        // Bullish FVG: Low of candle 3 is above high of candle 1
+        if (c3.low > c1.high) {
+            fvgs.push({
+                type: 'bullish',
+                top: c3.low,
+                bottom: c1.high,
+                index: i
+            });
+        }
+        // Bearish FVG: High of candle 3 is below low of candle 1
+        else if (c3.high < c1.low) {
+            fvgs.push({
+                type: 'bearish',
+                top: c1.low,
+                bottom: c3.high,
+                index: i
+            });
+        }
+    }
+    return fvgs;
+}
+
+/**
+ * Detect Order Blocks (Institutional Supply/Demand)
+ * Simple logic: Last opposite candle before a strong move (Break of Structure)
+ */
+export function detectOrderBlocks(data) {
+    if (!data || data.length < 5) return { bullish: [], bearish: [] };
+    
+    const bullishOBs = [];
+    const bearishOBs = [];
+
+    // Look back 20 candles for potential OBs
+    for (let i = data.length - 20; i < data.length - 3; i++) {
+        const c1 = data[i];     // Possible OB
+        const c2 = data[i+1];   // Start of displacement
+        const c3 = data[i+2];   // Confirmation
+        
+        // Bullish OB: Bearish candle followed by 2 strong bullish candles
+        if (c1.close < c1.open && c2.close > c2.open && c3.close > c3.open) {
+            const bodySize = Math.abs(c2.close - c2.open) + Math.abs(c3.close - c3.open);
+            if (bodySize > Math.abs(c1.close - c1.open) * 2) {
+                bullishOBs.push({ price: c1.low, high: c1.high });
+            }
+        }
+        
+        // Bearish OB: Bullish candle followed by 2 strong bearish candles
+        if (c1.close > c1.open && c2.close < c2.open && c3.close < c3.open) {
+            const bodySize = Math.abs(c2.close - c2.open) + Math.abs(c3.close - c3.open);
+            if (bodySize > Math.abs(c1.close - c1.open) * 2) {
+                bearishOBs.push({ price: c1.high, low: c1.low });
+            }
+        }
+    }
+
+    return { 
+        bullish: bullishOBs.slice(-2), 
+        bearish: bearishOBs.slice(-2) 
+    };
+}
+
+/**
+ * Detect Swing Highs and Lows
+ * @param {Array} data - Array of candles
+ * @param {number} strength - Number of candles on each side to confirm a swing point
+ */
+export function detectSwingPoints(data, strength = 3) {
+    if (!data || data.length < strength * 2 + 1) return { highs: [], lows: [] };
+    
+    const highs = [];
+    const lows = [];
+
+    for (let i = strength; i < data.length - strength; i++) {
+        const current = data[i];
+        let isHigh = true;
+        let isLow = true;
+
+        for (let j = 1; j <= strength; j++) {
+            if (data[i - j].high >= current.high || data[i + j].high > current.high) isHigh = false;
+            if (data[i - j].low <= current.low || data[i + j].low < current.low) isLow = false;
+        }
+
+        if (isHigh) highs.push({ price: current.high, index: i, time: current.time });
+        if (isLow) lows.push({ price: current.low, index: i, time: current.time });
+    }
+
+    return { highs, lows };
+}
+
+/**
+ * Detect Market Structure: Break of Structure (BOS) and Change of Character (CHoCH)
+ */
+export function detectMarketStructure(data) {
+    if (!data || data.length < 50) return { trend: 'neutral', lastEvent: null };
+
+    const { highs, lows } = detectSwingPoints(data, 3);
+    if (highs.length < 2 || lows.length < 2) return { trend: 'neutral', lastEvent: null };
+
+    let trend = 'neutral';
+    let lastEvent = null;
+
+    // Simplified logic for BOS/CHoCH
+    const lastHigh = highs[highs.length - 1];
+    const prevHigh = highs[highs.length - 2];
+    const lastLow = lows[lows.length - 1];
+    const prevLow = lows[lows.length - 2];
+
+    const currentPrice = data[data.length - 1].close;
+
+    // Check for BOS (Trend Continuation)
+    if (currentPrice > lastHigh.price) {
+        trend = 'bullish';
+        lastEvent = 'BOS (Bullish)';
+    } else if (currentPrice < lastLow.price) {
+        trend = 'bearish';
+        lastEvent = 'BOS (Bearish)';
+    }
+
+    // Check for CHoCH (Trend Reversal)
+    // If we were in a bearish trend (LL, LH) and we break a LH -> Bullish CHoCH
+    if (lastHigh.price > prevHigh.price && currentPrice > lastHigh.price) {
+        lastEvent = 'CHoCH (Bullish)';
+        trend = 'bullish';
+    }
+    // If we were in a bullish trend (HH, HL) and we break a HL -> Bearish CHoCH
+    if (lastLow.price < prevLow.price && currentPrice < lastLow.price) {
+        lastEvent = 'CHoCH (Bearish)';
+        trend = 'bearish';
+    }
+
+    return { trend, lastEvent, lastHigh, lastLow };
+}
+
+/**
+ * Detect Liquidity Sweeps
+ * Price spikes below/above swing points then reverses
+ */
+export function detectLiquiditySweeps(data) {
+    if (!data || data.length < 20) return [];
+    
+    const { highs, lows } = detectSwingPoints(data.slice(0, -5), 3);
+    const recentCandles = data.slice(-5);
+    const sweeps = [];
+
+    if (highs.length > 0) {
+        const keyHigh = highs[highs.length - 1];
+        for (const candle of recentCandles) {
+            // Price went above swing high but closed below it
+            if (candle.high > keyHigh.price && candle.close < keyHigh.price) {
+                sweeps.push({ type: 'bearish_reversal', level: keyHigh.price, time: candle.time });
+                break;
+            }
+        }
+    }
+
+    if (lows.length > 0) {
+        const keyLow = lows[lows.length - 1];
+        for (const candle of recentCandles) {
+            // Price went below swing low but closed above it
+            if (candle.low < keyLow.price && candle.close > keyLow.price) {
+                sweeps.push({ type: 'bullish_reversal', level: keyLow.price, time: candle.time });
+                break;
+            }
+        }
+    }
+
+    return sweeps;
 }

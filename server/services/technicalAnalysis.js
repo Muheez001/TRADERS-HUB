@@ -21,7 +21,8 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
 
     // === CALCULATE ALL INDICATORS ===
     const indicators = calculateAllIndicators(candles);
-    const { rsi, macd, bollingerBands, volume, adx, stochastic, atr, ema, confluenceScore, confluenceBias, confluenceFactors } = indicators;
+    const { rsi, macd, bollingerBands, volume, adx, stochastic, atr, ema, confluenceScore, confluenceBias, confluenceFactors, mfi, orderBlocks, fvg, marketStructure, liquiditySweeps } = indicators;
+    const ema200 = ema.ema200;
 
     // === CANDLESTICK PATTERN DETECTION ===
     const patternResult = detectPatterns(candles.slice(-10));
@@ -42,6 +43,49 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
         } else if (confluenceBias === 'bearish') {
             signal = 'SELL';
             confidence = Math.min(95, 50 + confluenceScore * 0.5);
+        }
+    }
+
+    // Adam Khoo Trend Filter: High probability only if aligned with 200 EMA
+    if (ema200 && signal !== 'WAIT') {
+        if (signal === 'BUY' && last.close < ema200) {
+            confidence -= 20; // Lower confidence if against long-term trend
+            confluenceFactors.push('Against 200 EMA trend (Adam Khoo filter)');
+        } else if (signal === 'SELL' && last.close > ema200) {
+            confidence -= 20;
+            confluenceFactors.push('Against 200 EMA trend (Adam Khoo filter)');
+        }
+    }
+
+    // Trade Confident Whale Filter: MFI verification
+    if (mfi && signal !== 'WAIT') {
+        if (signal === 'BUY' && mfi.value > 80) {
+            confidence -= 15; // Overbought distribution
+            confluenceFactors.push('Whale distribution detected (MFI overbought)');
+        } else if (signal === 'SELL' && mfi.value < 20) {
+            confidence -= 15; // Oversold accumulation
+            confluenceFactors.push('Whale accumulation detected (MFI oversold)');
+        }
+    }
+
+    // SMC Market Structure Filter
+    if (marketStructure.lastEvent && signal !== 'WAIT') {
+        if (signal === 'BUY' && marketStructure.trend === 'bearish') {
+            confidence -= 20; // Aggressive counter-trend
+            confluenceFactors.push('Against bearish market structure');
+        } else if (signal === 'SELL' && marketStructure.trend === 'bullish') {
+            confidence -= 20;
+            confluenceFactors.push('Against bullish market structure');
+        }
+    }
+
+    // Liquidity Sweep Confirmations
+    if (liquiditySweeps.length > 0 && signal !== 'WAIT') {
+        const lastSweep = liquiditySweeps[liquiditySweeps.length - 1];
+        if ((signal === 'BUY' && lastSweep.type === 'bullish_reversal') ||
+            (signal === 'SELL' && lastSweep.type === 'bearish_reversal')) {
+            confidence = Math.min(95, confidence + 20);
+            confluenceFactors.push(`${lastSweep.type} confirms entry`);
         }
     }
 
@@ -135,11 +179,13 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
         pattern: detectedPattern,
         patternDescription,
         detectedPatterns: allPatterns,
-        marketStructure: signal === 'BUY'
-            ? `Bullish structure. ${adx.trending ? 'Strong uptrend' : 'Ranging with bullish bias'}.`
-            : signal === 'SELL'
-                ? `Bearish structure. ${adx.trending ? 'Strong downtrend' : 'Ranging with bearish bias'}.`
-                : 'Price consolidating. Awaiting directional breakout.',
+        marketStructure: marketStructure.lastEvent 
+            ? `${marketStructure.lastEvent} detected. ${marketStructure.trend.toUpperCase()} structure dominance.`
+            : signal === 'BUY'
+                ? `Bullish structure. ${adx.trending ? 'Strong uptrend' : 'Ranging with bullish bias'}.`
+                : signal === 'SELL'
+                    ? `Bearish structure. ${adx.trending ? 'Strong downtrend' : 'Ranging with bearish bias'}.`
+                    : 'Price consolidating. Awaiting directional breakout.',
         entry: signal === 'WAIT' ? null : entry,
         stopLoss: signal === 'WAIT' ? null : stopLoss,
         takeProfit: signal === 'WAIT' ? null : takeProfit,
@@ -168,7 +214,11 @@ export function analyzeTechnicals(symbol, candles, assetType, accountSize) {
             volume: { current: volume.current, average: volume.average, ratio: volume.ratio, spike: volume.spike },
             adx: { value: adx.value, trending: adx.trending, direction: adx.direction },
             stochastic: { k: stochastic.k, d: stochastic.d, zone: stochastic.zone, crossover: stochastic.crossover },
-            atr
+            atr,
+            mfi: mfi.value,
+            ema200,
+            fvgCount: fvg.length,
+            obCount: orderBlocks.bullish.length + orderBlocks.bearish.length
         },
         confluenceScore,
         confluenceBias,

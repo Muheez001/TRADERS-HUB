@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import { searchDocuments, getStats } from './vectorStore.js';
 import { analyzeTechnicals } from './technicalAnalysis.js';
 import { calculateAllIndicators } from './indicators.js';
+import { fetchOnChainMetrics } from './duneService.js';
 
 dotenv.config();
 
@@ -216,6 +217,17 @@ export async function analyzeMarketStructure(symbol, currentInterval, candlesDat
         ? news.map((n, i) => `${i + 1}. ${n.title}`).join('\n')
         : "No recent news available.";
 
+    // === FETCH ON-CHAIN METRICS (DUNE) ===
+    let onChainContext = "No on-chain data available.";
+    try {
+        const onChainMetrics = await fetchOnChainMetrics(symbol);
+        if (onChainMetrics && onChainMetrics.length > 0) {
+            onChainContext = onChainMetrics.map(m => `- ${m.metric}: ${m.value} (${m.sentiment.toUpperCase()})`).join('\n');
+        }
+    } catch (duneError) {
+        console.warn('⚠️ Dune metrics fetch failed:', duneError.message);
+    }
+
     // === CALCULATE ALL TECHNICAL INDICATORS ===
     const indicators = calculateAllIndicators(candles);
     console.log(`📊 Indicators calculated: Confluence Score ${indicators.confluenceScore}/100, Bias: ${indicators.confluenceBias}`);
@@ -255,13 +267,12 @@ Your objective is to identify trade opportunities when indicators show reasonabl
 
 1. Generate a trade setup when confidence ≥ 65%. You should aim to find setups — most markets have tradeable opportunities.
 
-2. A valid setup requires at least 2-3 of these confirming:
-   - Price action structure (trend, key levels, candlestick patterns)
-   - 2+ indicators aligning in the same direction (RSI, MACD, EMA, Stochastic, Bollinger Bands)
-   - Volume supporting the move OR trending market (ADX > 20)
-   - Multi-timeframe alignment is a bonus but NOT required for every setup
+2. A valid setup requires BOTH Technical and Fundamental alignment:
+   - Technicals: 2+ indicators aligning (RSI, MACD, EMA, Stochastic, Bollinger Bands) + Price action structure
+   - Fundamentals: The recent market news MUST NOT strongly conflict with the technical bias.
+   - If technicals show a BUY but news is heavily bearish (or indicates economic uncertainty/crash), you MUST reject the setup or flip the bias based on macro factors.
 
-3. Candlestick patterns at key levels (support/resistance) with at least one confirming indicator are valid setups.
+3. Candlestick patterns at key levels (support/resistance) with at least one confirming indicator are valid setups, provided no major news invalidates the level.
 
 4. Risk management:
    - Stop-loss should be ATR-based or placed at nearby structure (swing high/low)
@@ -269,10 +280,15 @@ Your objective is to identify trade opportunities when indicators show reasonabl
    - Calculate position size based on account size and risk tolerance provided
    - Always calculate and show dollar risk
 
-5. Be realistic but constructive:
-   - Identify the best opportunity from the data provided
-   - Note risks, but don't let them prevent you from giving a setup if indicators align
-   - News context is supplementary — don't reject a technically sound setup due to general news uncertainty
+5. Fundamental Analysis is CRITICAL:
+   - You are a professional data analyst and trader. News context is NOT just supplementary; it is a primary driver of market sentiment.
+   - Do not provide a setup if the news indicates a high-risk, volatile, or conflicting macroeconomic environment.
+   - Your rationale MUST explicitly connect the fundamental news sentiment with the resulting trade decision. If you generate a setup, explain how the news supports it.
+
+6. EXPERT STRATEGIES (MUST INCLUDE):
+   - **Adam Khoo**: Respect the 200 EMA trend. Only take Longs if price is hovering above 200 EMA, and Shorts if below. Use 1:2 or 1:1.5 RR.
+   - **Smart Money Concepts (SMC)**: Identify "Break of Structure" (BOS) or "Change of Character" (CHoCH). The "SMC Stack" setup is: CHoCH (reversal) -> Return to Order Block (OB) or Fair Value Gap (FVG) -> Entry. Liquidity Sweeps of swing highs/lows are powerful reversal triggers.
+   - **Trade Confident**: Use the MFI (Money Flow Index) to identify where the "whales" are moving. High MFI (>80) is distribution, Low MFI (<20) is accumulation.
 
 === CONFIDENCE SCORING GUIDE ===
 - 65-70%: 2 indicators aligned + price at key level = valid setup
@@ -306,12 +322,19 @@ Volume: Current=${indicators.volume.current.toFixed(0)} | Avg=${indicators.volum
 ADX(14): ${indicators.adx.value.toFixed(1)} | Market: ${indicators.adx.trending ? 'TRENDING' : 'RANGING'} | Direction: ${indicators.adx.direction}
 Stochastic(14,3,3): %K=${indicators.stochastic.k.toFixed(1)} | %D=${indicators.stochastic.d.toFixed(1)} | Zone: ${indicators.stochastic.zone}${indicators.stochastic.crossover ? ` | CROSSOVER: ${indicators.stochastic.crossover}` : ''}
 ATR(14): ${indicators.atr.toFixed(4)}
-EMA9: ${indicators.ema.ema9?.toFixed(4) || 'N/A'} | EMA21: ${indicators.ema.ema21?.toFixed(4) || 'N/A'}
+EMA9: ${indicators.ema.ema9?.toFixed(4) || 'N/A'} | EMA21: ${indicators.ema.ema21?.toFixed(4) || 'N/A'} | EMA200: ${indicators.ema.ema200?.toFixed(4) || 'N/A'}
+MFI(14): ${indicators.mfi.value?.toFixed(1) || '50'} (Money Flow / Whale Activity)
+SMC FACTORS: FVG=${indicators.fvg.length > 0 ? 'Yes' : 'No'} | OrderBlocks=${(indicators.orderBlocks.bullish.length + indicators.orderBlocks.bearish.length) > 0 ? 'Yes' : 'No'}
+MARKET STRUCTURE: ${indicators.marketStructure.lastEvent || 'Normal'} | Trend: ${indicators.marketStructure.trend}
+LIQUIDITY SWEEPS: ${indicators.liquiditySweeps.length > 0 ? `Yes (${indicators.liquiditySweeps[indicators.liquiditySweeps.length-1].type})` : 'None detected'}
 CONFLUENCE SCORE: ${indicators.confluenceScore}/100 | BIAS: ${indicators.confluenceBias.toUpperCase()}
-ALIGNED FACTORS: ${indicators.confluenceFactors.slice(0, 5).join(', ') || 'None'}
+ALIGNED FACTORS: ${indicators.confluenceFactors.slice(0, 8).join(', ') || 'None'}
 
 === RECENT MARKET NEWS ===
 ${newsContext}
+
+=== ON-CHAIN INTELLIGENCE (DUNE) ===
+${onChainContext}
 
 ${knowledgeContext}
 
@@ -338,6 +361,9 @@ Analyze this data and find the best trade setup. You should STRONGLY PREFER givi
     "support": [number, number],
     "resistance": [number, number]
   },
+  "market_structure": "Analysis of BOS (Break of Structure), CHoCH (Change of Character), and trend alignment with 200 EMA.",
+  "smc_insights": "Analysis of fair value gaps (FVG) and institutional order blocks.",
+  "whale_activity": "Interpretation of Money Flow Index (MFI) and volume peaks.",
   "rationale": "Clear, concise paragraph explaining WHY this setup has edge — cite the specific indicators and price action that align.",
   "confluence_factors": [
     "Factor 1",
@@ -348,7 +374,7 @@ Analyze this data and find the best trade setup. You should STRONGLY PREFER givi
     "Risk 1",
     "Risk 2"
   ],
-  "management": "Trade management plan"
+  "management": "Adam Khoo style trade management plan (e.g., move to break-even at 1R)."
 }
 
 **B. No Setup (ONLY when signals genuinely conflict with no clear bias):**
@@ -363,13 +389,13 @@ Analyze this data and find the best trade setup. You should STRONGLY PREFER givi
 }
 
 IMPORTANT RULES:
-- Your DEFAULT should be to find and provide a setup — only return "no_setup" when data truly conflicts
-- If the pre-computed confluence score shows a bias (bullish or bearish), there IS likely a setup — find it
-- Use precise, professional language
-- Never invent data — only use what is provided
-- Calculate position_size and dollar_risk precisely based on account size and risk tolerance
-- Ensure stop_loss placement is ATR-based or structure-based
-- Only output valid JSON, no other text`;
+- Your DEFAULT is to provide a setup ONLY IF technicals and fundamentals align. Return "no_setup" when data truly conflicts (e.g., Bullish Technicals vs Bearish News).
+- If the pre-computed confluence score shows a bias, verify it against the news before confirming the setup.
+- Use precise, professional language suitable for a senior analyst.
+- Never invent data — only use what is provided.
+- Calculate position_size and dollar_risk precisely based on account size and risk tolerance.
+- Ensure stop_loss placement is ATR-based or structure-based.
+- Only output valid JSON, no other text.`;
 
         const result = await model.generateContent(prompt);
         const responseText = result.response.text();
